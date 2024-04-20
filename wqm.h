@@ -1,0 +1,65 @@
+// Multi-threaded work crew
+// (c) L. Farhi, 2024
+// Language: C
+#ifndef __THREADPOOL_H__
+#  define __THREADPOOL_H__
+#  include <stddef.h>
+
+// 'threadpool_create_and_start' creates a threadpool of 'nb_workers' workers.
+// If 'nb_workers' is 0 or 'NB_CPU', the number of workers is set equal to the number of available CPUs.
+// Arguments 'global_data', 'make_local', 'delete_local' are optional (see below).
+// Returns 0 (with errno = ENOMEM) on error, a pointer to the created threadpool otherwise (with errno = ENOMEM if not all required workers could be created).
+extern const size_t NB_CPU;
+extern const size_t SEQUENTIAL;
+struct threadpool *threadpool_create_and_start (size_t nb_workers,
+                                                void *global_data,
+                                                void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data));
+
+// Call to 'threadpool_add_task' is MT-safe.
+// Tasks can be submitted to workers. They will be processed in parallel distributed over workers of the threadpool.
+// The submitted work is defined by the use defined function 'work'. 'work' should be made MT-safe.
+// The submitted job is defined by 'job'.
+//   - 'job' will be passed to 'work' when processed by a worker.
+//   - 'job' will be destroyed by a call to 'job_delete' once the job has been processed by the worker.
+// 'threadpool' is passed to 'work' to give it access to 'threadpool_add_task', 'threadpool_global_data' and 'threadpool_worker_local_data' if needed.
+// Therefore, a worker can also create and submit tasks on his own.
+// Argument 'job_delete' is optional (see below).
+// Returns 0 on error, 1 otherwise.
+// Set errno to ENOMEM on error (out of memory).
+int threadpool_add_task (struct threadpool *threadpool,
+                         void (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
+
+// Once all tasks have been submitted to the threadpool, 'threadpool_wait_and_destroy' waits for all the tasks to be finished and thereafter destroys the threadpool.
+// 'threadpool' should not be used after a call to 'threadpool_wait_and_destroy'.
+void threadpool_wait_and_destroy (struct threadpool *threadpool);
+
+// ** Options for 'threadpool_create_and_start' **
+// Global data pointed to by 'global_data' will be accessible to worker through a call to 'threadpool_global_data'.
+void *threadpool_global_data (struct threadpool *threadpool);
+
+// Workers local data constructed by 'make_local' and destroyed by 'delete_local' will be (MT-safely) accessible to worker through a call to 'threadpool_worker_local_data'.
+// Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialization.
+// Call to 'delete_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker termination.
+// 'delete_local' is passed, as first argument, a value previously returned by 'make_local'.
+// Global data (as if returned by threadpool_global_data) is passed as an argument to 'make_local' and second argument to 'delete_local'.
+// 'make_local' and 'delete_local' can therefore access and update the content of 'global_data' safely if needed (to gather results or statistics for instance).
+void *threadpool_worker_local_data (struct threadpool *threadpool);
+
+// ** Options for 'threadpool_add_job' **
+// Call to 'job_delete' is MT-safe and, if not null, is done once per job (no less no more) right after the job has been completed by 'worker'.
+// 'job_delete' is passed, as argument, the 'job' added by 'threadpool_add_job'.
+// 'job_delete' is useful if the 'job' passed to 'threadpool_add_job' has been allocated dynamically and needs to be free'd after use.
+// This could alternatively (and less conveniently) be done manually at the end for 'worker'.
+
+struct threadpool_monitor
+{
+  struct threadpool *threadpool;        // Monitored Thread pool.
+  float time;                   // Elapsed seconds since thread pool creation.
+  size_t max_nb_workers, nb_running_workers, nb_active_workers, nb_idle_workers, nb_processed_tasks, nb_pending_tasks;  // Monitoring data.
+};
+typedef void (*threadpool_monitor_handler) (struct threadpool_monitor);
+// Set monitor handler.
+// Returns previously set monitor handler.
+// Monitor handler will be called asynchronously (without interfering with the execution of workers) and executed thread-safely and not after `threadpool_wait_and_destroy` has been called.
+threadpool_monitor_handler threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new);
+#endif
