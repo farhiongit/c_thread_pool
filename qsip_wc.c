@@ -7,7 +7,7 @@
 // -DDEBUG: For debugging purpose only.
 // Compile options for algorithm:
 // ================= Quick sort in place =================
-#include "wc.h"
+#include "wqm.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <errno.h>
