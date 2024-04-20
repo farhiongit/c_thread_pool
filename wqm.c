@@ -6,7 +6,7 @@
 #include <sys/sysinfo.h>        // for get_nprocs
 #include <errno.h>
 #include <time.h>
-#include "wc.h"
+#include "wqm.h"
 #define thrd_honored(cond) do { if ((cond) != thrd_success) abort () ; } while (0)      // returns thrd_success on success or thrd_error if the request could not be honored.
 #define threadpool_something_to_process_predicate(threadpool)   ((threadpool)->out)     // Indicates that the FIFO is not empty.
 #define threadpool_is_done_predicate(threadpool)   ( (threadpool)->nb_active_workers == 0 && \
