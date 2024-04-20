@@ -20,7 +20,7 @@
 #endif
 #define _(s) (s)
 #include "qsip_wc.h"
-#include "wc.h"
+#include "wqm.h"
 
 typedef unsigned char SortableType;
 
