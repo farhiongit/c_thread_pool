@@ -22,7 +22,8 @@
 #include "qsip_wc.h"
 #include "wqm.h"
 
-typedef unsigned char SortableType;
+//typedef unsigned char SortableType;
+typedef long long int SortableType;
 
 static int
 lti (const void *a, const void *b, void *arg)
@@ -67,7 +68,7 @@ monitoring (struct threadpool_monitor data)
   static char gauge = '\r';
   static char roll = '\n';
   (void) (roll + gauge);
-  fprintf (stdout, "[%p: % 10.4fs] ", data.threadpool, data.time);
+  fprintf (stdout, "[%p][% 10.4fs] ", data.threadpool, data.time);
   size_t i;
   for (i = 0; i < data.nb_processed_tasks; i++)
     fprintf (stdout, "X");
@@ -79,7 +80,7 @@ monitoring (struct threadpool_monitor data)
     fprintf (stdout, ".");
   for (i = 0; i < data.max_nb_workers; i++)
     fprintf (stdout, " ");
-  fprintf (stdout, "%c", roll);
+  fprintf (stdout, "%c", gauge);
   fflush (stdout);
 }
 
@@ -123,8 +124,9 @@ main ()
 #else
   fprintf (stdout, _(" [Reproductible]\n"));
 #endif
-  for (size_t i = 0; i < ((size_t) TIMES) * ((size_t) SIZE); i++)
-    base[i] = (1LL << 31) * random () + random ();
+  for (size_t i = 0; i < (size_t) TIMES; i++)
+    for (size_t j = 0; j < (size_t) SIZE; j++)
+    base[i * (size_t) SIZE + j] = ((1LL << 31) * random () + random ()) % (1LL << i);
   char threads_tags[] = "1234567";      // 7 workers
   struct gd gd = { (size_t) SIZE, ELEM_SIZE (base), threads_tags };
   struct threadpool *tp = threadpool_create_and_start (strlen (threads_tags), &gd, tag, untag); // Start 7 workers

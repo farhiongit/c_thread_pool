@@ -51,13 +51,13 @@ typedef struct                  // Threadpool specific global data
   const size_t elem_size;       // Size of elements of type of *base
   int (*const elem_lt) (const void *, const void *, void *);    // Elements comparator
   void *const elem_lt_arg;      // elem_lt third argument
-  atomic_size_t nb_swaps;       // For debugging purpose only. MT safe.
+  atomic_size_t nb_swaps, nb_cmp;       // For debugging purpose only. MT safe.
 } GlobalData;
 
 typedef struct                  // Thread specific local data
 {
   void *temp;                   // Will be used as temporary data for swap
-  size_t nb_swaps;              // For debugging purpose only.
+  size_t nb_swaps, nb_cmp;      // For debugging purpose only.
 #ifndef FIXED_PIVOT
   struct random_data rpg_state; // thread random generator state 
 #endif
@@ -69,7 +69,7 @@ local_data_create (void *vg)    // Called at worker initialization
   GlobalData *g = vg;
   LocalData *l = calloc (1, sizeof (*l));       // calloc, for rpg_state to be initialized to 0 (see initstate_r).
   EXEC_OR_ABORT (l);
-  l->nb_swaps = 0;
+  l->nb_swaps = l->nb_cmp = 0;
   l->temp = malloc (g->elem_size);
   EXEC_OR_ABORT (l->temp);
 #ifndef FIXED_PIVOT
@@ -86,6 +86,7 @@ local_data_delete (void *vl, void *vg)  // Called at worker termination
   LocalData *l = vl;
   GlobalData *g = vg;
   atomic_fetch_add (&g->nb_swaps, l->nb_swaps);
+  atomic_fetch_add (&g->nb_cmp, l->nb_cmp);
   free (l->temp);
   free (l);
 }
@@ -102,7 +103,7 @@ swap (void *a, void *b, size_t size, void *temp)
 }
 
 static void *
-work2 (Job *job, GlobalData *g, LocalData *l)
+lomuto (Job *job, GlobalData *g, LocalData *l)
 {
   int32_t result = job->nmemb / 2;      // Magical number 2 :(
 #ifndef FIXED_PIVOT
@@ -116,6 +117,7 @@ work2 (Job *job, GlobalData *g, LocalData *l)
       swap (pivot - g->elem_size, elem, g->elem_size, l->temp);
       swap (pivot, pivot - g->elem_size, g->elem_size, l->temp);
       l->nb_swaps += 2;
+      l->nb_cmp++;
       pivot -= g->elem_size;
       elem -= g->elem_size;
     }
@@ -125,10 +127,89 @@ work2 (Job *job, GlobalData *g, LocalData *l)
       swap (pivot + g->elem_size, elem, g->elem_size, l->temp);
       swap (pivot, pivot + g->elem_size, g->elem_size, l->temp);
       l->nb_swaps += 2;
+      l->nb_cmp++;
       pivot += g->elem_size;
     }
   // elements equal to pivot (*pivot == *elem) are left where they are.
   return pivot;
+}
+
+static void
+lomuto2 (Job *job, GlobalData *g, LocalData *l, void **lt, void **gt)
+{
+  int32_t result = job->nmemb / 2;      // Magical number 2 :(
+#ifndef FIXED_PIVOT
+  random_r (&l->rpg_state, &result);
+#endif
+  void *pi = job->base + (g->elem_size * (result % job->nmemb));        // Select the pivot
+  swap (job->base, pi, g->elem_size, l->temp);
+  pi = job->base;
+  l->nb_swaps++;
+  *lt = job->base + g->elem_size;
+  *gt = job->base + g->elem_size * job->nmemb;
+  // |p|l            i ?               |g
+  // |p|    <    |l  i ?    |g    >    |
+  for (void *i = *lt; i < *gt; i += g->elem_size)
+    if (g->elem_lt (i, pi, g->elem_lt_arg))     // *p > *i
+    {
+      l->nb_cmp++;
+      swap (i, *lt, g->elem_size, l->temp);
+      l->nb_swaps++;
+      *lt += g->elem_size;
+    }
+    else if (g->elem_lt (pi, i, g->elem_lt_arg))        // *p < *i
+    {
+      l->nb_cmp++;
+      *gt -= g->elem_size;
+      swap (i, *gt, g->elem_size, l->temp);
+      l->nb_swaps++;
+      i -= g->elem_size;
+    }
+  // |p|    <    |l    =    |g    >    |
+  *lt -= g->elem_size;
+  swap (pi, *lt, g->elem_size, l->temp);
+  l->nb_swaps++;
+  *gt -= g->elem_size;
+  // |      <   |l     =   g|     >    |
+}
+
+static void *
+hoare (Job *job, GlobalData *g, LocalData *l)
+{
+  int32_t result = job->nmemb / 2;      // Magical number 2 :(
+#ifndef FIXED_PIVOT
+  random_r (&l->rpg_state, &result);
+#endif
+  void *pi, *pj, *pn, *a;
+  a = job->base;
+  pi = a + (g->elem_size * (result % job->nmemb));      // Select the pivot
+  swap (a, pi, g->elem_size, l->temp);
+  l->nb_swaps++;
+  pi = a;
+  pj = pn = a + job->nmemb * g->elem_size;
+  for (;;)
+  {
+    do
+    {
+      pi += g->elem_size;
+      l->nb_cmp++;
+    }
+    while (pi < pn && g->elem_lt (pi, a, g->elem_lt_arg));
+    do
+    {
+      pj -= g->elem_size;
+      l->nb_cmp++;
+    }
+    while (g->elem_lt (a, pj, g->elem_lt_arg));
+    l->nb_cmp -= 2;
+    if (pj < pi)
+      break;
+    swap (pi, pj, g->elem_size, l->temp);
+    l->nb_swaps++;
+  }
+  swap (a, pj, g->elem_size, l->temp);
+  l->nb_swaps++;
+  return pj;
 }
 
 static void
@@ -140,15 +221,18 @@ work (struct threadpool *threadpool, void *j)
   {
     LocalData *l = threadpool_worker_local_data (threadpool);
     GlobalData *g = threadpool_global_data (threadpool);
-    void *pivot = work2 (job, g, l);    //<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    void *p1, *p2;
+    //p1 = p2 = hoare (job, g, l);    //<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    //p1 = p2 = lomuto (job, g, l);   //<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    lomuto2 (job, g, l, &p1, &p2);      //<<<<<<<<<<<<<<<<<<<<<<<<<<<
     Job *new_job1 = job_create ((Job) {
-                                .base = job->base,.nmemb = (pivot - job->base) / g->elem_size,
+                                .base = job->base,.nmemb = (p1 - job->base) / g->elem_size,
                                 });
     EXEC_OR_ABORT (new_job1);
     DPRINTF ("Job         (%1$p, %2$'zu) to be added to jobs ...\n", new_job1->base, new_job1->nmemb);
     threadpool_add_task (threadpool, work, new_job1, free);
     Job *new_job2 = job_create ((Job) {
-                                .base = pivot + g->elem_size,.nmemb = job->nmemb - 1 - ((pivot - job->base) / g->elem_size),
+                                .base = p2 + g->elem_size,.nmemb = job->nmemb - 1 - ((p2 - job->base) / g->elem_size),
                                 });
     EXEC_OR_ABORT (new_job2);
     DPRINTF ("Job         (%1$p, %2$'zu) to be added to jobs ...\n", new_job2->base, new_job2->nmemb);
@@ -179,6 +263,7 @@ qsip (void *base, size_t nmemb, size_t size, int (*lt) (const void *, const void
   // Initialize the pool of thread workers.
   GlobalData global_data = {.elem_size = size,.elem_lt = lt,.elem_lt_arg = 0 };
   atomic_init (&global_data.nb_swaps, 0);
+  atomic_init (&global_data.nb_cmp, 0);
   struct threadpool *ThreadPool = threadpool_create_and_start (NB_CPU, &global_data, local_data_create, local_data_delete);
 
   // Feed thread workers.
@@ -190,6 +275,7 @@ qsip (void *base, size_t nmemb, size_t size, int (*lt) (const void *, const void
   // Wait for all threads to be finished.
   threadpool_wait_and_destroy (ThreadPool);
   DPRINTF ("%'zu swaps were made.\n", atomic_load (&global_data.nb_swaps));
+  DPRINTF ("%'zu comparisons were made.\n", atomic_load (&global_data.nb_cmp));
 
   return EXIT_SUCCESS;
 }
