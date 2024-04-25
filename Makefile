@@ -9,6 +9,7 @@ all: qsip_wc_test info
 #qsip_wc_test: CFLAGS += -DSIZE=100 -DTIMES=10
 #qsip_wc_test: CFLAGS += -DQSORT
 #qsip_wc_test: CFLAGS+=-DTIMES=20
+#qsip_wc_test: CFLAGS += -DSIZE=10 -DTIMES=1
 qsip_wc_test: qsip_wc_test.c qsip_wc.o wqm.o
 
 #qsip_wc.o: CFLAGS += -DFIXED_PIVOT
