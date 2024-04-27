@@ -1,3 +1,5 @@
+CFLAGS+=-O
+
 run: qsip_wc_test info
 	./qsip_wc_test
 

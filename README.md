@@ -28,6 +28,7 @@ The user:
 | - | - |
 | `threadpool_create_and_start` | Create and start a new pool of workers |
 | `threadpool_add_task` | Add a task to the pool of workers |
+| `threadpool_cancel_task` | Cancel all pending tasks, the last submitted task, or a specified task |
 | `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
 
 #### Advanced functionalities
@@ -74,22 +75,21 @@ The maximum number of workers can be defined higher than the number of CPUs as w
 ### 2. Submit a task
 
 ```c
-int threadpool_add_task (struct threadpool *threadpool,
-                         void (*work) (struct threadpool * threadpool, void *job),
-                         void *job,
-                         void (*job_delete) (void *job))
+size_t threadpool_add_task (struct threadpool *threadpool,
+                            void (*work) (struct threadpool * threadpool, void *job),
+                            void *job,
+                            void (*job_delete) (void *job))
 ```
 
 A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
 
 - The first argument `threadpool` is a thread pool returned by a previous call to `threadpool_create_and_start ()`.
-- The second argument `work`, mandatory, is a user defined function executed by a worker of the thread pool (in a parallel manner).
+- The second argument `work` is a user defined function to be executed by a worker of the thread pool on `job`.
   This function receives the thread pool and a pointer to a job as arguments.
   Therefore, `work` can itself call `threadpool_add_task`, `threadpool_global_data` or `threadpool_worker_local_data` if needed.
-- The third argument `job` is the data to be used by the task.
+- The third argument `job` is the data to be used by the task and that will be processed by `work`.
 
-Each worker can process a task at a time. A task is processed as soon as a worker is available. 
-A worker stops when all submitted tasks have been processed or after an idle time (half a second).
+The function returns a unique id of the submitted task, or 0 on error.
 
 ###### Options
 
@@ -110,8 +110,23 @@ typedef struct {
   struct { ... } result;
 } job;
 ```
+### 3. Cancel tasks
 
-### 3. Wait for all the submitted tasks to be completed
+```c
+size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
+```
+
+Previously submitted and still pending tasks can be canceled.
+`task_id` is:
+
+- either a unique id returned by a previous call to `threadpool_add_task` ;
+- or `ALL_TASKS` to cancel all still pending tasks ;
+- or `LAST_TASK` to cancel the last submitted task.
+
+Pending tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called for canceled tasks though.
+The function returns the number of canceled tasks, if any.
+
+### 4. Wait for all the submitted tasks to be completed
 
 ```c
 void threadpool_wait_and_destroy (struct threadpool *threadpool)
@@ -122,7 +137,7 @@ This function declares that all the tasks have been submitted.
 It then waits for all the tasks to be completed by workers.
 `threadpool` should not be used after a call to `threadpool_wait_and_destroy ()`.
 
-### 4. Monitor the thread pool activity
+### 5. Monitor the thread pool activity
 
 A monitoring of the thread pool activity can optionally be activated by calling
 ```c
@@ -169,22 +184,38 @@ Type `make` to compile and run the example.
 Running this example yields:
 ```
 $ make
-cc    -c -o wqm.o wqm.c
-cc    -c -o qsip_wc.o qsip_wc.c
-cc     qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
-wqm.o:0000000000000000 R NB_CPU
-wqm.o:0000000000000008 R SEQUENTIAL
-wqm.o:0000000000000a6d T threadpool_add_task
-wqm.o:0000000000000311 T threadpool_create_and_start
-wqm.o:0000000000000e31 T threadpool_global_data
-wqm.o:000000000000025e T threadpool_set_monitor
-wqm.o:0000000000000c9b T threadpool_wait_and_destroy
-wqm.o:0000000000000e11 T threadpool_worker_local_data
-qsip_wc.o:0000000000000b2a T qsip
+cc -O   -c -o wqm.o wqm.c
+cc -O   -c -o qsip_wc.o qsip_wc.c
+cc -O    qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
+wqm.o:0000000000000008 R ALL_TASKS
+wqm.o:0000000000000000 R LAST_TASK
+wqm.o:0000000000000018 R NB_CPU
+wqm.o:0000000000000010 R SEQUENTIAL
+wqm.o:00000000000001de T threadpool_add_task
+wqm.o:00000000000008e8 T threadpool_cancel_task
+wqm.o:0000000000000046 T threadpool_create_and_start
+wqm.o:00000000000008df T threadpool_global_data
+wqm.o:0000000000000466 T threadpool_set_monitor
+wqm.o:00000000000004f3 T threadpool_wait_and_destroy
+wqm.o:00000000000005de T threadpool_worker_local_data
+qsip_wc.o:000000000000031a T qsip
 ./qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times...
 (X) processed tasks, (*) processing tasks, (-) idle workers, (.) pending tasks. 
-[0x5f67eeaa4860][   27.5566s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX         
+[0x5c2abef3d860][    0.0000s]        
+[0x5c2abef3d860][    0.0001s] .       
+[0x5c2abef3d860][    0.0002s] ..       
+[0x5c2abef3d860][    0.0002s] *.       
+[0x5c2abef3d860][    0.0004s] *..       
+[0x5c2abef3d860][    0.0005s] *...       
+.
+.
+.
+[0x5c2abef3d860][   20.2264s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX**-       
+[0x5c2abef3d860][   20.2735s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX*--       
+[0x5c2abef3d860][   20.2962s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX--       
+[0x5c2abef3d860][   20.2962s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-       
+[0x5c2abef3d860][   20.2962s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX       
 ```
 
 ## Implementation details
@@ -206,6 +237,10 @@ Compared to Butenhof's, it yields extra features:
 ### Management of workers
 
 Workers are started automatically when needed, that is when a new task is submitted whereas all workers are already booked.
+Workers are running in parallel.
+Each worker can process a task at a time. A task is processed as soon as a worker is available.
+
+A worker stops when all submitted tasks have been processed or after an idle time (half a second).
 Idle workers are kept ready for new tasks for a short time and are then stopped automatically to release system resources.
 
 For instance, say a task requires 2 seconds to be processed and the maximum idle delay for a worker is half a second:
