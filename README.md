@@ -14,36 +14,29 @@ The user:
 2. submits tasks to the thread pool that will pass it to one of the available workers (`threadpool_add_task ()`) ;
 3. waits for all the tasks to be completed (`threadpool_wait_and_destroy ()`).
 
-## Implementation
+### Files
 
-The API is implemented in C11 (file `wqm.c`).
-It is highly inspired from the great book "Programming with POSIX Threads" written by David R. Butenhof, 21st ed., 2008, Addison Wesley.
+| Interface | Implementation |
+|- | - |
+| `wqm.h` | `wqm.c` |
 
-## Features
+### Interface
 
-Compared to Butenhof's, it yields extra features:
+#### Basic functionalities
 
-1. It uses the standard (minimalist) thread C11 library, rather the POSIX threads.
-1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
-1. Local data can be defined and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
-1. The data passed to tasks can be accessed and released in a thread-safe manner after completion of the task (via the user defined function `job_delete ()`).
-1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, in case another task still being processed would create new tasks dynamically.
-1. The activity of the thread pool can be monitored and displayed by a front-end user defined function.
+| Function | Description |
+| - | - |
+| `threadpool_create_and_start` | Create and start a new pool of workers |
+| `threadpool_add_task` | Add a task to the pool of workers |
+| `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
 
-## Management of workers
+#### Advanced functionalities
 
-Workers are started automatically when needed, that is when a new task is submitted whereas all workers are already booked. 
-Idle workers are kept ready for new tasks for a short time and are then stopped automatically to release system resources.
-
-For instance, say a task requires 2 seconds to be processed and the maximum idle delay for a worker is half a second:
-
-- if the task is repeatedly submitted every 3 seconds to the thread pool, one worker will be created and activated on submission, and stopped after completion of the task and an idle time (of half a second).
-- if the task is submitted every 2.4 seconds to the thread pool, one worker will be created and activated on submission, kept idle and ready for the next task.
-- if the task is submitted every 2 seconds, one worker will be active to process the tasks.
-- if the task is submitted every second, two workers will be active to process the tasks.
-- if the rate of submitted tasks is very high, the maximum number of workers (as passed to `threadpool_create_and_start ()`) will be active.
-
-Therefore, the number for workers automatically adapts to the rate and duration for tasks.
+| Function | Description |
+| - | - |
+| `threadpool_global_data` | Access the user defined shared global data of the pool of workers |
+| `threadpool_worker_local_data` | Access the user defined local of a worker |
+| `threadpool_set_monitor` | Set a user-defined function to retrieve and display monitoring informations |
 
 ## Detailed API
 
@@ -129,9 +122,9 @@ This function declares that all the tasks have been submitted.
 It then waits for all the tasks to be completed by workers.
 `threadpool` should not be used after a call to `threadpool_wait_and_destroy ()`.
 
-### 4. Monitoring of the thread pool activity
+### 4. Monitor the thread pool activity
 
-A monitoring of the thread pool can optionally be activated by calling
+A monitoring of the thread pool activity can optionally be activated by calling
 ```c
 threadpool_monitor_handler threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new)
 ```
@@ -141,8 +134,8 @@ A user-defined handler function is passed as second argument, with signature
 void (*threadpool_monitor_handler) (struct threadpool_monitor)
 ```
 
-This handler will be called asynchronously (without interfering with the execution of workers) when the state of the thread pool changes, and will be executed thread-safely and not after `threadpool_wait_and_destroy` has been called (actually, a sequential dedicated thread pool is used).
-The monitoring data are passed to the handler function in the structure `threadpool_monitor` which contains:
+This handler will be called to retrieve and display information about the activity of the tread pool.
+The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
 
 - `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
 - `float time`: the elapsed seconds since the creation of the thread pool ;
@@ -152,6 +145,13 @@ The monitoring data are passed to the handler function in the structure `threadp
 - `size_t nb_idle_workers`: the number of idle worker, i.e. waiting for a task to process ;
 - `size_t nb_pending_tasks`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
 - `size_t nb_processed_tasks`: the number of already processed tasks by the thread pool.
+
+This handler :
+
+- will be called when the state of the thread pool changes,
+- will be called asynchronously, without interfering with the execution of workers (actually, a sequential dedicated thread pool is used),
+- will be executed thread-safely,
+- will not be called not after `threadpool_wait_and_destroy` has been called.
 
 ## Examples
 
@@ -165,42 +165,58 @@ An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_w
 
     - It uses global data, worker local data, and monitoring feature.
 
+Type `make` to compile and run the example.
 Running this example yields:
 ```
-$ CFLAGS='-DTIMES=4' make -B
-clang -DTIMES=4 -Wall -O3   -c -o wqm.o wqm.c
-clang -DTIMES=4 -Wall -O3   -c -o qsip_wc.o qsip_wc.c
-clang -DTIMES=4 -Wall -O3    qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
+$ make
+cc    -c -o wqm.o wqm.c
+cc    -c -o qsip_wc.o qsip_wc.c
+cc     qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
 wqm.o:0000000000000000 R NB_CPU
 wqm.o:0000000000000008 R SEQUENTIAL
-wqm.o:0000000000000300 T threadpool_add_task
-wqm.o:0000000000000080 T threadpool_create_and_start
-wqm.o:0000000000000900 T threadpool_global_data
-wqm.o:0000000000000000 T threadpool_set_monitor
-wqm.o:0000000000000800 T threadpool_wait_and_destroy
-wqm.o:00000000000008f0 T threadpool_worker_local_data
-qsip_wc.o:0000000000000000 T qsip
-
-$ ./qsip_wc_test
-Sorting 1,000,000 elements (multi-threaded quick sort in place), 4 times...
+wqm.o:0000000000000a6d T threadpool_add_task
+wqm.o:0000000000000311 T threadpool_create_and_start
+wqm.o:0000000000000e31 T threadpool_global_data
+wqm.o:000000000000025e T threadpool_set_monitor
+wqm.o:0000000000000c9b T threadpool_wait_and_destroy
+wqm.o:0000000000000e11 T threadpool_worker_local_data
+qsip_wc.o:0000000000000b2a T qsip
+./qsip_wc_test
+Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times...
 (X) processed tasks, (*) processing tasks, (-) idle workers, (.) pending tasks. 
-[0x64c89c7c4860:     0.0000s]        
-[0x64c89c7c4860:     0.0001s] .       
-[0x64c89c7c4860:     0.0002s] ..       
-[0x64c89c7c4860:     0.0002s] *.       
-[0x64c89c7c4860:     0.0003s] **       
-[0x64c89c7c4860:     0.0004s] **.       
-[0x64c89c7c4860:     0.0005s] **..       
-[0x64c89c7c4860:     0.0005s] ***.       
-[0x64c89c7c4860:     0.0025s] ****       
-[0x64c89c7c4860:     0.5893s] X***-       
-[0x64c89c7c4860:     0.6510s] XX**--       
-[0x64c89c7c4860:     0.6893s] XX**-       
-[0x64c89c7c4860:     0.7149s] XXX*--       
-[0x64c89c7c4860:     0.7511s] XXX*-       
-[0x64c89c7c4860:     0.7756s] XXXX-       
-[0x64c89c7c4860:     0.7756s] XXXX       
+[0x5f67eeaa4860][   27.5566s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX         
 ```
+
+## Implementation details
+
+The API is implemented in C11 (file `wqm.c`).
+It is highly inspired from the great book "Programming with POSIX Threads" written by David R. Butenhof, 21st ed., 2008, Addison Wesley.
+
+### Features
+
+Compared to Butenhof's, it yields extra features:
+
+1. It uses the standard (minimalist) thread C11 library, rather the POSIX threads.
+1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
+1. Local data can be defined and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. The data passed to tasks can be accessed and released in a thread-safe manner after completion of the task (via the user defined function `job_delete ()`).
+1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, in case another task still being processed would create new tasks dynamically.
+1. The activity of the thread pool can be monitored and displayed by a front-end user defined function.
+
+### Management of workers
+
+Workers are started automatically when needed, that is when a new task is submitted whereas all workers are already booked.
+Idle workers are kept ready for new tasks for a short time and are then stopped automatically to release system resources.
+
+For instance, say a task requires 2 seconds to be processed and the maximum idle delay for a worker is half a second:
+
+- if the task is repeatedly submitted every 3 seconds to the thread pool, one worker will be created and activated on submission, and stopped after completion of the task and an idle time (of half a second).
+- if the task is submitted every 2.4 seconds to the thread pool, one worker will be created and activated on submission, kept idle and ready for the next task.
+- if the task is submitted every 2 seconds, one worker will be active to process the tasks.
+- if the task is submitted every second, two workers will be active to process the tasks.
+- if the rate of submitted tasks is very high, the maximum number of workers (as passed to `threadpool_create_and_start ()`) will be active.
+
+Therefore, the number for workers automatically adapts to the rate and duration for tasks.
 
 ## That's it. Have fun and let me know!
 
