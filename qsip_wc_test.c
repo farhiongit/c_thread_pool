@@ -80,7 +80,7 @@ monitoring (struct threadpool_monitor data)
     fprintf (stdout, ".");
   for (i = 0; i < data.max_nb_workers; i++)
     fprintf (stdout, " ");
-  fprintf (stdout, "%c", gauge);
+  fprintf (stdout, "%c", roll); // Use gauge, rather than roll, to display a progress bar.
   fflush (stdout);
 }
 
@@ -126,7 +126,7 @@ main ()
 #endif
   for (size_t i = 0; i < (size_t) TIMES; i++)
     for (size_t j = 0; j < (size_t) SIZE; j++)
-    base[i * (size_t) SIZE + j] = ((1LL << 31) * random () + random ()) % (1LL << i);
+      base[i * (size_t) SIZE + j] = ((1LL << 31) * random () + random ()) % (1LL << i);
   char threads_tags[] = "1234567";      // 7 workers
   struct gd gd = { (size_t) SIZE, ELEM_SIZE (base), threads_tags };
   struct threadpool *tp = threadpool_create_and_start (strlen (threads_tags), &gd, tag, untag); // Start 7 workers
@@ -137,6 +137,10 @@ main ()
   sleep (TIMES / 6);
   for (; i < (size_t) TIMES; i++)
     threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);  // Parallel work
+  sleep (3);
+  threadpool_cancel_task (tp, LAST_TASK);
+  sleep (1);
+  threadpool_cancel_task (tp, ALL_TASKS);
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, "\n");
   free (base);

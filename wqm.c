@@ -6,6 +6,7 @@
 #include <sys/sysinfo.h>        // for get_nprocs
 #include <errno.h>
 #include <time.h>
+#include <stdint.h>
 #include "wqm.h"
 #define thrd_honored(cond) do { if ((cond) != thrd_success) abort () ; } while (0)      // returns thrd_success on success or thrd_error if the request could not be honored.
 #define threadpool_something_to_process_predicate(threadpool)   ((threadpool)->out)     // Indicates that the FIFO is not empty.
@@ -17,6 +18,8 @@
 
 size_t const NB_CPU = 0;
 size_t const SEQUENTIAL = 1;
+size_t const ALL_TASKS = 0;
+size_t const LAST_TASK = SIZE_MAX;
 struct threadpool
 {
   size_t max_nb_workers;
@@ -40,13 +43,14 @@ struct threadpool
       void *job;
       void (*work) (struct threadpool * threadpool, void *job);
       void (*job_delete) (void *job);
+      size_t id;
     } task;
   } *in, *out;
   int concluding;               // Indicates that 'threadpool_wait_and_destroy' has been called. Only workers can now add tasks (in 'thread_worker_starter').
   size_t nb_active_workers;     // Number of tasks extracted from fifo and still being processed.
   cnd_t proceed_or_conclude_or_runoff;  // Associated with 3 exclusive predicates.
   // Monitoring
-  size_t nb_processed_tasks, nb_pending_tasks;
+  size_t nb_processed_tasks, nb_pending_tasks, nb_submitted_tasks;
   void (*monitor) (struct threadpool_monitor);
   struct threadpool *monitoring;
   struct timespec t0;
@@ -131,7 +135,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   threadpool->in = threadpool->out = 0;
   threadpool->concluding = 0;
   threadpool->nb_active_workers = 0;
-  threadpool->nb_processed_tasks = threadpool->nb_pending_tasks = 0;
+  threadpool->nb_processed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = 0;
   threadpool->monitor = 0;
   threadpool->monitoring = 0;
   timespec_get (&threadpool->t0, TIME_UTC);
@@ -155,10 +159,8 @@ thread_worker_runner (void *args)
 {
   thrd_detach (thrd_current ());        // dispose of any resources allocated to the thread when it terminates.
   struct threadpool *threadpool = args;
-  thrd_honored (mtx_lock (&threadpool->mutex)); // Call to threadpool->worker_local_data.make is thread-safe.
-  thrd_honored (tss_set
-                (threadpool->worker_local_data.reference,
-                 threadpool->worker_local_data.make ? threadpool->worker_local_data.make (threadpool->global_data) : 0));
+  thrd_honored (mtx_lock (&threadpool->mutex));
+  thrd_honored (tss_set (threadpool->worker_local_data.reference, threadpool->worker_local_data.make ? threadpool->worker_local_data.make (threadpool->global_data) : 0));      // Call to threadpool->worker_local_data.make is thread-safe.
   while (1)                     // Looping on tasks (concurrently with other workers)
   {
     static const struct timespec timeout_delay = {.tv_sec = 0,.tv_nsec = 100 * 1000 * 1000 };   // Idle time (0.1 s)
@@ -174,7 +176,7 @@ thread_worker_runner (void *args)
         break;                  // Timeout
     }
     threadpool->nb_idle_workers--;
-    if (threadpool_something_to_process_predicate (threadpool)) // First condition of the predicate is true (both conditions can't be true at the same time by design.
+    if (threadpool_something_to_process_predicate (threadpool)) // First condition of the predicate is true (both conditions can't be true at the same time by design.)
     {
       struct elem *old_elem = threadpool->out;
       if (threadpool->in == threadpool->out)
@@ -189,11 +191,13 @@ thread_worker_runner (void *args)
         thrd_honored (mtx_unlock (&threadpool->mutex));
         old_elem->task.work (threadpool, old_elem->task.job);   //<<<<<<<<<< work <<<<<<<<<<< (N.B.: workers can add tasks by calling 'threadpool_add_task').
         thrd_honored (mtx_lock (&threadpool->mutex));
-        if (old_elem->task.job_delete)  // MT-safe
-          old_elem->task.job_delete (old_elem->task.job);       // Get rid of job after use.
         threadpool->nb_active_workers--;
         threadpool->nb_processed_tasks++;
       }
+      else
+        threadpool_monitor_call (threadpool);
+      if (old_elem->task.job_delete)    // MT-safe
+        old_elem->task.job_delete (old_elem->task.job); // Get rid of job after use.
       free (old_elem);
       continue;                 // while (1) 
     }
@@ -219,7 +223,7 @@ thread_worker_runner (void *args)
   return 1;
 }
 
-int
+size_t
 threadpool_add_task (struct threadpool *threadpool,
                      void (*work) (struct threadpool *threadpool, void *job), void *job, void (*job_delete) (void *job))
 {
@@ -228,6 +232,7 @@ threadpool_add_task (struct threadpool *threadpool,
   if (!new_elem)
   {
     thrd_honored (mtx_unlock (&threadpool->mutex));
+    errno = ENOMEM;
     return 0;
   }
   struct task task = { job, work, job_delete };
@@ -241,11 +246,13 @@ threadpool_add_task (struct threadpool *threadpool,
     threadpool->in = new_elem;
   }
   threadpool->nb_pending_tasks++;
-  if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is pending: 
+  threadpool->nb_submitted_tasks++;
+  new_elem->task.id = threadpool->nb_submitted_tasks;
+  if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is idle and available:
     thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff));     // Signal it to wake one of the pending workers.
-  else if (threadpool->nb_running_workers < threadpool->max_nb_workers) // No worker are available to process this new task at once.
+  else if (threadpool->nb_running_workers < threadpool->max_nb_workers) // No worker are idle and available to process this new task at once:
     for (size_t i = 0; i < threadpool->max_nb_workers; i++)
-      if (!threadpool->running_worker_id[i] && thrd_create (&threadpool->worker_id[i], thread_worker_runner, threadpool) == thrd_success)
+      if (!threadpool->running_worker_id[i] && thrd_create (&threadpool->worker_id[i], thread_worker_runner, threadpool) == thrd_success)       // Create a new worker.
       {
         threadpool->running_worker_id[i] = &threadpool->worker_id[i];   // Register running worker.
         threadpool->nb_running_workers++;
@@ -286,4 +293,25 @@ void *
 threadpool_global_data (struct threadpool *threadpool)
 {
   return threadpool->global_data;
+}
+
+size_t
+threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
+{
+  size_t ret = 0;
+  thrd_honored (mtx_lock (&threadpool->mutex));
+  if (task_id == LAST_TASK && threadpool->out)
+  {
+    threadpool->out->task.work = 0;
+    ret++;
+  }
+  else
+    for (struct elem * e = threadpool->out; e; e = e->next)
+      if (task_id == ALL_TASKS || e->task.id == task_id)
+      {
+        e->task.work = 0;       // The job won't be processed by thread_worker_runner.
+        ret++;
+      }
+  thrd_honored (mtx_unlock (&threadpool->mutex));
+  return ret;
 }

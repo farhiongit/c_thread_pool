@@ -24,10 +24,16 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers,
 // 'threadpool' is passed to 'work' to give it access to 'threadpool_add_task', 'threadpool_global_data' and 'threadpool_worker_local_data' if needed.
 // Therefore, a worker can also create and submit tasks on his own.
 // Argument 'job_delete' is optional (see below).
-// Returns 0 on error, 1 otherwise.
+// Returns 0 on error, a unique id of the submitted task otherwise.
 // Set errno to ENOMEM on error (out of memory).
-int threadpool_add_task (struct threadpool *threadpool,
-                         void (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
+size_t threadpool_add_task (struct threadpool *threadpool,
+                            void (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
+
+// Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_TASKS, or the last submitted task if task_id is equal to LAST_TASK.
+// Returns the number of canceled tasks.
+extern const size_t ALL_TASKS;
+extern const size_t LAST_TASK;
+size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id);
 
 // Once all tasks have been submitted to the threadpool, 'threadpool_wait_and_destroy' waits for all the tasks to be finished and thereafter destroys the threadpool.
 // 'threadpool' should not be used after a call to 'threadpool_wait_and_destroy'.
