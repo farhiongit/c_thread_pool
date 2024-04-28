@@ -203,21 +203,20 @@ wqm.o:00000000000005de T threadpool_worker_local_data
 qsip_wc.o:000000000000031a T qsip
 ./qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times...
-(X) processed tasks, (*) processing tasks, (-) idle workers, (.) pending tasks. 
-[0x5c2abef3d860][    0.0000s]        
-[0x5c2abef3d860][    0.0001s] .       
-[0x5c2abef3d860][    0.0002s] ..       
-[0x5c2abef3d860][    0.0002s] *.       
-[0x5c2abef3d860][    0.0004s] *..       
-[0x5c2abef3d860][    0.0005s] *...       
+(=) processed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.
+[0x56c845b5d860][    0.0000s]        
+[0x56c845b5d860][    0.0001s] .       
+[0x56c845b5d860][    0.0002s] ..       
+[0x56c845b5d860][    0.0003s] *.       
+[0x56c845b5d860][    0.0003s] *..       
 .
 .
 .
-[0x5c2abef3d860][   20.2264s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX**-       
-[0x5c2abef3d860][   20.2735s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX*--       
-[0x5c2abef3d860][   20.2962s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX--       
-[0x5c2abef3d860][   20.2962s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-       
-[0x5c2abef3d860][   20.2962s] XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX       
+[0x56c845b5d860][   20.5774s] ===============================================================================**xxxxxxxxxxxxxxxxxxx-       
+[0x56c845b5d860][   20.6522s] ===============================================================================**xxxxxxxxxxxxxxxxxxx       
+[0x56c845b5d860][   20.7577s] ================================================================================*xxxxxxxxxxxxxxxxxxx-       
+[0x56c845b5d860][   20.8578s] ================================================================================*xxxxxxxxxxxxxxxxxxx       
+[0x56c845b5d860][   20.8818s] =================================================================================xxxxxxxxxxxxxxxxxxx       
 ```
 
 ## Implementation details
@@ -235,6 +234,7 @@ Compared to Butenhof's, it yields extra features:
 1. The data passed to tasks can be accessed and released in a thread-safe manner after completion of the task (via the user defined function `job_delete ()`).
 1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, in case another task still being processed would create new tasks dynamically.
 1. The activity of the thread pool can be monitored and displayed by a front-end user defined function.
+1. Pending tasks can be canceled after submission.
 
 ### Management of workers
 

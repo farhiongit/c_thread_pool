@@ -61,7 +61,7 @@ struct threadpool_monitor
 {
   struct threadpool *threadpool;        // Monitored Thread pool.
   float time;                   // Elapsed seconds since thread pool creation.
-  size_t max_nb_workers, nb_running_workers, nb_active_workers, nb_idle_workers, nb_processed_tasks, nb_pending_tasks;  // Monitoring data.
+  size_t max_nb_workers, nb_running_workers, nb_active_workers, nb_idle_workers, nb_processed_tasks, nb_pending_tasks, nb_canceled_tasks;       // Monitoring data.
 };
 typedef void (*threadpool_monitor_handler) (struct threadpool_monitor);
 // Set monitor handler.

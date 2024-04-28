@@ -50,7 +50,7 @@ struct threadpool
   size_t nb_active_workers;     // Number of tasks extracted from fifo and still being processed.
   cnd_t proceed_or_conclude_or_runoff;  // Associated with 3 exclusive predicates.
   // Monitoring
-  size_t nb_processed_tasks, nb_pending_tasks, nb_submitted_tasks;
+  size_t nb_processed_tasks, nb_pending_tasks, nb_submitted_tasks, nb_canceled_tasks;
   void (*monitor) (struct threadpool_monitor);
   struct threadpool *monitoring;
   struct timespec t0;
@@ -76,6 +76,7 @@ threadpool_monitor_call (struct threadpool *threadpool)
       {.threadpool = threadpool,.max_nb_workers = threadpool->max_nb_workers,.nb_running_workers = threadpool->nb_running_workers,
         .nb_active_workers = threadpool->nb_active_workers,.nb_idle_workers = threadpool->nb_idle_workers,
         .nb_processed_tasks = threadpool->nb_processed_tasks,.nb_pending_tasks = threadpool->nb_pending_tasks,
+        .nb_canceled_tasks = threadpool->nb_canceled_tasks,
       };
       struct timespec t;
       timespec_get (&t, TIME_UTC);
@@ -135,7 +136,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   threadpool->in = threadpool->out = 0;
   threadpool->concluding = 0;
   threadpool->nb_active_workers = 0;
-  threadpool->nb_processed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = 0;
+  threadpool->nb_processed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = threadpool->nb_canceled_tasks = 0;
   threadpool->monitor = 0;
   threadpool->monitoring = 0;
   timespec_get (&threadpool->t0, TIME_UTC);
@@ -245,6 +246,8 @@ threadpool_add_task (struct threadpool *threadpool,
   }
   if (work)
     threadpool->nb_pending_tasks++;
+  else
+    threadpool->nb_canceled_tasks++;
   threadpool->nb_submitted_tasks++;
   new_elem->task.id = threadpool->nb_submitted_tasks + ALL_TASKS;
   if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is idle and available:
@@ -309,8 +312,12 @@ threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
     if (task_id == LAST_TASK || e->task.id == task_id)
       break;
   }
-  threadpool->nb_pending_tasks -= ret;
-  threadpool_monitor_call (threadpool);
+  if (ret)
+  {
+    threadpool->nb_pending_tasks -= ret;
+    threadpool->nb_canceled_tasks += ret;
+    threadpool_monitor_call (threadpool);
+  }
   thrd_honored (mtx_unlock (&threadpool->mutex));
   return ret;
 }

@@ -64,20 +64,22 @@ monitoring (struct threadpool_monitor data)
 {
   static int legend = 0;
   if (!legend)
-    legend = fprintf (stdout, "(X) processed tasks, (*) processing tasks, (-) idle workers, (.) pending tasks. \n");
+    legend = fprintf (stdout, "(=) processed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.\n");
   static char gauge = '\r';
   static char roll = '\n';
   (void) (roll + gauge);
   fprintf (stdout, "[%p][% 10.4fs] ", data.threadpool, data.time);
   size_t i;
   for (i = 0; i < data.nb_processed_tasks; i++)
-    fprintf (stdout, "X");
+    fprintf (stdout, "=");
   for (i = 0; i < data.nb_active_workers; i++)
     fprintf (stdout, "*");
-  for (; i < data.nb_active_workers + data.nb_idle_workers; i++)
-    fprintf (stdout, "-");
   for (i = 0; i < data.nb_pending_tasks; i++)
     fprintf (stdout, ".");
+  for (i = 0; i < data.nb_canceled_tasks; i++)
+    fprintf (stdout, "x");
+  for (i = data.nb_active_workers; i < data.nb_active_workers + data.nb_idle_workers; i++)
+    fprintf (stdout, "-");
   for (i = 0; i < data.max_nb_workers; i++)
     fprintf (stdout, " ");
   fprintf (stdout, "%c", roll); // Use gauge, rather than roll, to display a progress bar.
