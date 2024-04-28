@@ -234,6 +234,7 @@ Compared to Butenhof's, it yields extra features:
 1. The data passed to tasks can be accessed and released in a thread-safe manner after completion of the task (via the user defined function `job_delete ()`).
 1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, in case another task still being processed would create new tasks dynamically.
 1. The activity of the thread pool can be monitored and displayed by a front-end user defined function.
+1. Pending tasks can be canceled after submission.
 
 ### Management of workers
 
