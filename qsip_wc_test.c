@@ -144,8 +144,8 @@ main ()
   threadpool_cancel_task (tp, task_id);
   threadpool_cancel_task (tp, task_id);
   sleep (1);
-  threadpool_cancel_task (tp, LAST_TASK);
-  threadpool_cancel_task (tp, LAST_TASK);
+  threadpool_cancel_task (tp, NEXT_TASK);
+  threadpool_cancel_task (tp, NEXT_TASK);
   sleep (1);
   threadpool_cancel_task (tp, ALL_TASKS);
   threadpool_wait_and_destroy (tp);

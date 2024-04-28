@@ -19,7 +19,7 @@
 size_t const NB_CPU = 0;
 size_t const SEQUENTIAL = 1;
 size_t const ALL_TASKS = 1;
-size_t const LAST_TASK = SIZE_MAX;
+size_t const NEXT_TASK = SIZE_MAX;
 struct threadpool
 {
   size_t max_nb_workers;
@@ -248,7 +248,8 @@ threadpool_add_task (struct threadpool *threadpool,
     threadpool->nb_pending_tasks++;
   else
     threadpool->nb_canceled_tasks++;
-  threadpool->nb_submitted_tasks++;
+  if (!++threadpool->nb_submitted_tasks)
+    threadpool->nb_submitted_tasks++;
   new_elem->task.id = threadpool->nb_submitted_tasks + ALL_TASKS;
   if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is idle and available:
     thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff));     // Signal it to wake one of the pending workers.
@@ -304,12 +305,12 @@ threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
   thrd_honored (mtx_lock (&threadpool->mutex));
   for (struct elem * e = threadpool->out; e; e = e->next)
   {
-    if (!((task_id == LAST_TASK && e->task.work) || e->task.id == task_id || task_id == ALL_TASKS))
+    if (!((task_id == NEXT_TASK && e->task.work) || e->task.id == task_id || task_id == ALL_TASKS))
       continue;
     if (e->task.work)
       ret++;
     e->task.work = 0;           // The job won't be processed by thread_worker_runner.
-    if (task_id == LAST_TASK || e->task.id == task_id)
+    if (task_id == NEXT_TASK || e->task.id == task_id)
       break;
   }
   if (ret)
