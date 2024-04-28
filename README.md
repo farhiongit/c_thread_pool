@@ -28,7 +28,7 @@ The user:
 | - | - |
 | `threadpool_create_and_start` | Create and start a new pool of workers |
 | `threadpool_add_task` | Add a task to the pool of workers |
-| `threadpool_cancel_task` | Cancel all pending tasks, the last submitted task, or a specific task |
+| `threadpool_cancel_task` | Cancel all pending tasks, the next submitted task, or a specific task |
 | `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
 
 #### Advanced functionalities
@@ -121,7 +121,7 @@ Previously submitted and still pending tasks can be canceled.
 
 - either a unique id returned by a previous call to `threadpool_add_task` ;
 - or `ALL_TASKS` to cancel all still pending tasks ;
-- or `LAST_TASK` to cancel the last still pending submitted task (it can be used several times in a row).
+- or `NEXT_TASK` to cancel the next still pending submitted task (it can be used several times in a row).
 
 Canceled tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called though.
 
@@ -191,7 +191,7 @@ cc -O   -c -o wqm.o wqm.c
 cc -O   -c -o qsip_wc.o qsip_wc.c
 cc -O    qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
 wqm.o:0000000000000008 R ALL_TASKS
-wqm.o:0000000000000000 R LAST_TASK
+wqm.o:0000000000000000 R NEXT_TASK
 wqm.o:0000000000000018 R NB_CPU
 wqm.o:0000000000000010 R SEQUENTIAL
 wqm.o:00000000000001de T threadpool_add_task

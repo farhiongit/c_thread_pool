@@ -29,10 +29,10 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers,
 size_t threadpool_add_task (struct threadpool *threadpool,
                             void (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
 
-// Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_TASKS, or the last submitted task if task_id is equal to LAST_TASK.
+// Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_TASKS, or the next submitted task if task_id is equal to NEXT_TASK.
 // Returns the number of canceled tasks.
 extern const size_t ALL_TASKS;
-extern const size_t LAST_TASK;
+extern const size_t NEXT_TASK;
 size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id);
 
 // Once all tasks have been submitted to the threadpool, 'threadpool_wait_and_destroy' waits for all the tasks to be finished and thereafter destroys the threadpool.
