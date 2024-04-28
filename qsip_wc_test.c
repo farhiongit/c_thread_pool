@@ -132,12 +132,17 @@ main ()
   struct threadpool *tp = threadpool_create_and_start (strlen (threads_tags), &gd, tag, untag); // Start 7 workers
   threadpool_set_monitor (tp, monitoring);
   int i = 0;
+  size_t task_id;
   for (; i < ((size_t) TIMES) / 2; i++)
-    threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);  // Parallel work
+    task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (TIMES / 6);
   for (; i < (size_t) TIMES; i++)
-    threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);  // Parallel work
-  sleep (3);
+    task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
+  sleep (2);
+  threadpool_cancel_task (tp, task_id);
+  threadpool_cancel_task (tp, task_id);
+  sleep (1);
+  threadpool_cancel_task (tp, LAST_TASK);
   threadpool_cancel_task (tp, LAST_TASK);
   sleep (1);
   threadpool_cancel_task (tp, ALL_TASKS);

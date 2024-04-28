@@ -28,7 +28,7 @@ The user:
 | - | - |
 | `threadpool_create_and_start` | Create and start a new pool of workers |
 | `threadpool_add_task` | Add a task to the pool of workers |
-| `threadpool_cancel_task` | Cancel all pending tasks, the last submitted task, or a specified task |
+| `threadpool_cancel_task` | Cancel all pending tasks, the last submitted task, or a specific task |
 | `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
 
 #### Advanced functionalities
@@ -36,8 +36,8 @@ The user:
 | Function | Description |
 | - | - |
 | `threadpool_global_data` | Access the user defined shared global data of the pool of workers |
-| `threadpool_worker_local_data` | Access the user defined local of a worker |
-| `threadpool_set_monitor` | Set a user-defined function to retrieve and display monitoring informations |
+| `threadpool_worker_local_data` | Access the user defined local data of a worker |
+| `threadpool_set_monitor` | Set a user-defined function to retrieve and display monitoring information |
 
 ## Detailed API
 
@@ -121,9 +121,10 @@ Previously submitted and still pending tasks can be canceled.
 
 - either a unique id returned by a previous call to `threadpool_add_task` ;
 - or `ALL_TASKS` to cancel all still pending tasks ;
-- or `LAST_TASK` to cancel the last submitted task.
+- or `LAST_TASK` to cancel the last still pending submitted task (it can be used several times in a row).
 
-Pending tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called for canceled tasks though.
+Canceled tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called though.
+
 The function returns the number of canceled tasks, if any.
 
 ### 4. Wait for all the submitted tasks to be completed
@@ -174,11 +175,12 @@ An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_w
 
 - `qsip_wc.c` is an attempt to implement a parallelized version of the quick sort algorithm (using a thread pool);
 
-    - It uses global data, worker local data, dynamic creation and deletion of jobs.
+    - It uses features such as global data, worker local data, dynamic creation and deletion of jobs.
+    - It reveals that parallelizing quick sort is inefficient due to thread management overhead.
 
 - `qsip_wc_test.c` is an example of a thread pool that sorts several arrays using the above parallelized version of the quick sort algorithm.
 
-    - It uses global data, worker local data, and monitoring feature.
+    - It uses features such as global data, worker local data, task cancellation and monitoring.
 
 Type `make` to compile and run the example.
 Running this example yields:
