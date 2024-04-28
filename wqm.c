@@ -194,8 +194,6 @@ thread_worker_runner (void *args)
         threadpool->nb_active_workers--;
         threadpool->nb_processed_tasks++;
       }
-      else
-        threadpool_monitor_call (threadpool);
       if (old_elem->task.job_delete)    // MT-safe
         old_elem->task.job_delete (old_elem->task.job); // Get rid of job after use.
       free (old_elem);
