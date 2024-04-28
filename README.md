@@ -160,7 +160,8 @@ The monitoring data are passed to the handler function in a structure `threadpoo
 - `size_t nb_active_workers`: the number of active workers, i.e. processing a task ;
 - `size_t nb_idle_workers`: the number of idle worker, i.e. waiting for a task to process ;
 - `size_t nb_pending_tasks`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
-- `size_t nb_processed_tasks`: the number of already processed tasks by the thread pool.
+- `size_t nb_processed_tasks`: the number of already processed tasks by the thread pool ;
+- `size_t nb_canceled_tasks`: the number of canceled tasks.
 
 This handler :
 
