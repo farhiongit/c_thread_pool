@@ -140,9 +140,12 @@ main ()
   sleep (TIMES / 6);
   for (; i < (size_t) TIMES; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
-  sleep (2);
+  sleep (1);
   threadpool_cancel_task (tp, task_id);
   threadpool_cancel_task (tp, task_id);
+  sleep (1);
+  threadpool_cancel_task (tp, LAST_TASK);
+  threadpool_cancel_task (tp, LAST_TASK);
   sleep (1);
   threadpool_cancel_task (tp, NEXT_TASK);
   threadpool_cancel_task (tp, NEXT_TASK);

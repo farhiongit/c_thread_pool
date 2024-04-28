@@ -121,7 +121,8 @@ Previously submitted and still pending tasks can be canceled.
 
 - either a unique id returned by a previous call to `threadpool_add_task` ;
 - or `ALL_TASKS` to cancel all still pending tasks ;
-- or `NEXT_TASK` to cancel the next still pending submitted task (it can be used several times in a row).
+- or `NEXT_TASK` to cancel the next still pending submitted task (it can be used several times in a row) ;
+- or `LAST_TASK` to cancel the last still pending submitted task (it can be used several times in a row).
 
 Canceled tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called though.
 
@@ -190,34 +191,35 @@ $ make
 cc -O   -c -o wqm.o wqm.c
 cc -O   -c -o qsip_wc.o qsip_wc.c
 cc -O    qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
-wqm.o:0000000000000008 R ALL_TASKS
-wqm.o:0000000000000000 R NEXT_TASK
-wqm.o:0000000000000018 R NB_CPU
-wqm.o:0000000000000010 R SEQUENTIAL
-wqm.o:00000000000001de T threadpool_add_task
-wqm.o:00000000000008e8 T threadpool_cancel_task
-wqm.o:0000000000000046 T threadpool_create_and_start
-wqm.o:00000000000008df T threadpool_global_data
-wqm.o:0000000000000466 T threadpool_set_monitor
-wqm.o:00000000000004f3 T threadpool_wait_and_destroy
-wqm.o:00000000000005de T threadpool_worker_local_data
+wqm.o:0000000000000010 R ALL_TASKS
+wqm.o:0000000000000000 R LAST_TASK
+wqm.o:0000000000000020 R NB_CPU
+wqm.o:0000000000000008 R NEXT_TASK
+wqm.o:0000000000000018 R SEQUENTIAL
+wqm.o:00000000000001f2 T threadpool_add_task
+wqm.o:0000000000000926 T threadpool_cancel_task
+wqm.o:000000000000004f T threadpool_create_and_start
+wqm.o:000000000000091d T threadpool_global_data
+wqm.o:00000000000004b5 T threadpool_set_monitor
+wqm.o:0000000000000542 T threadpool_wait_and_destroy
+wqm.o:000000000000062d T threadpool_worker_local_data
 qsip_wc.o:000000000000031a T qsip
 ./qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times...
 (=) processed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.
-[0x56c845b5d860][    0.0000s]        
-[0x56c845b5d860][    0.0001s] .       
-[0x56c845b5d860][    0.0002s] ..       
-[0x56c845b5d860][    0.0003s] *.       
-[0x56c845b5d860][    0.0003s] *..       
+[0x5baf7c61c860][    0.0000s]        
+[0x5baf7c61c860][    0.0001s] .       
+[0x5baf7c61c860][    0.0002s] ..       
+[0x5baf7c61c860][    0.0002s] ...       
+[0x5baf7c61c860][    0.0003s] *..       
 .
 .
 .
-[0x56c845b5d860][   20.5774s] ===============================================================================**xxxxxxxxxxxxxxxxxxx-       
-[0x56c845b5d860][   20.6522s] ===============================================================================**xxxxxxxxxxxxxxxxxxx       
-[0x56c845b5d860][   20.7577s] ================================================================================*xxxxxxxxxxxxxxxxxxx-       
-[0x56c845b5d860][   20.8578s] ================================================================================*xxxxxxxxxxxxxxxxxxx       
-[0x56c845b5d860][   20.8818s] =================================================================================xxxxxxxxxxxxxxxxxxx       
+[0x5baf7c61c860][   20.6596s] ================================================================================**xxxxxxxxxxxxxxxxxx-       
+[0x5baf7c61c860][   20.7333s] ================================================================================**xxxxxxxxxxxxxxxxxx       
+[0x5baf7c61c860][   20.9031s] =================================================================================*xxxxxxxxxxxxxxxxxx-       
+[0x5baf7c61c860][   21.0031s] =================================================================================*xxxxxxxxxxxxxxxxxx       
+[0x5baf7c61c860][   21.1596s] ==================================================================================xxxxxxxxxxxxxxxxxx       
 ```
 
 ## Implementation details
