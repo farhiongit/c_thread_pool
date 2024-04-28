@@ -28,7 +28,7 @@ The user:
 | - | - |
 | `threadpool_create_and_start` | Create and start a new pool of workers |
 | `threadpool_add_task` | Add a task to the pool of workers |
-| `threadpool_cancel_task` | Cancel all pending tasks, the next submitted task, or a specific task |
+| `threadpool_cancel_task` | Cancel all pending tasks, the last or next submitted task, or a specific task |
 | `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
 
 #### Advanced functionalities
@@ -128,7 +128,7 @@ Canceled tasks won't be processed, but `job_delete`, as optionally passed to `th
 
 The function returns the number of canceled tasks, if any.
 
-### 4. Wait for all the submitted tasks to be completed
+### 4. Wait for all submitted tasks to be completed
 
 ```c
 void threadpool_wait_and_destroy (struct threadpool *threadpool)
