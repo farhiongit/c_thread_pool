@@ -10,7 +10,7 @@
 #include "wqm.h"
 #define thrd_honored(cond) do { if ((cond) != thrd_success) abort () ; } while (0)      // returns thrd_success on success or thrd_error if the request could not be honored.
 #define threadpool_something_to_process_predicate(threadpool)   ((threadpool)->out)     // Indicates that the FIFO is not empty.
-#define threadpool_is_done_predicate(threadpool)   ( (threadpool)->nb_active_workers == 0 && \
+#define threadpool_is_done_predicate(threadpool)   ( (threadpool)->nb_processing_tasks == 0 && \
                                                      !threadpool_something_to_process_predicate (threadpool) && \
                                                      (threadpool)->concluding ) // The FIFO is empty and there is not work in progress or new task that could ever fill it (all expected tasks have been processed).
 // N.B.: Once done, a FIFO cannot be undone by design: there aren't any data being processed left, that could have called 'threadpool_add_task' and refilled the empty FIFO (see loop in 'thread_worker_starter').
@@ -33,36 +33,34 @@ struct threadpool
     void *(*make) (void *global_data);
     void (*destroy) (void *local_data, void *global_data);
   } worker_local_data;
-  size_t nb_running_workers;
+  size_t nb_running_workers, nb_idle_workers, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_pending_tasks, nb_submitted_tasks, nb_canceled_tasks;
   thrd_t **running_worker_id /* [max_nb_workers] */ ;
-  size_t nb_idle_workers;       // Workers are waiting for tasks or to conclude.
   struct elem                   // Elements in FIFO.
   {
     struct elem *next;
     struct task                 // Task to be processed by a worker.
     {
       void *job;
-      void (*work) (struct threadpool * threadpool, void *job);
+      int (*work) (struct threadpool * threadpool, void *job);
       void (*job_delete) (void *job);
       size_t id;
     } task;
   } *in, *out;
   int concluding;               // Indicates that 'threadpool_wait_and_destroy' has been called. Only workers can now add tasks (in 'thread_worker_starter').
-  size_t nb_active_workers;     // Number of tasks extracted from fifo and still being processed.
   cnd_t proceed_or_conclude_or_runoff;  // Associated with 3 exclusive predicates.
   // Monitoring
-  size_t nb_processed_tasks, nb_pending_tasks, nb_submitted_tasks, nb_canceled_tasks;
   void (*monitor) (struct threadpool_monitor);
   struct threadpool *monitoring;
   struct timespec t0;
 };
 
 // ================= Monitoring =================
-static void
+static int
 threadpool_monitor_exec (struct threadpool *monitoring, void *data)
 {
   if (((struct threadpool *) threadpool_global_data (monitoring))->monitor)
     ((struct threadpool *) threadpool_global_data (monitoring))->monitor (*(struct threadpool_monitor *) data);
+  return 0;
 }
 
 static void
@@ -74,10 +72,10 @@ threadpool_monitor_call (struct threadpool *threadpool)
     if (p)
     {
       *p = (struct threadpool_monitor)
-      {.threadpool = threadpool,.max_nb_workers = threadpool->max_nb_workers,.nb_running_workers = threadpool->nb_running_workers,
-        .nb_active_workers = threadpool->nb_active_workers,.nb_idle_workers = threadpool->nb_idle_workers,
-        .nb_processed_tasks = threadpool->nb_processed_tasks,.nb_pending_tasks = threadpool->nb_pending_tasks,
-        .nb_canceled_tasks = threadpool->nb_canceled_tasks,
+      {.threadpool = threadpool,.max_nb_workers = threadpool->max_nb_workers,
+        .nb_processing_tasks = threadpool->nb_processing_tasks,.nb_idle_workers = threadpool->nb_idle_workers,
+        .nb_succeeded_tasks = threadpool->nb_succeeded_tasks,.nb_failed_tasks = threadpool->nb_failed_tasks,
+        .nb_pending_tasks = threadpool->nb_pending_tasks,.nb_canceled_tasks = threadpool->nb_canceled_tasks,
       };
       struct timespec t;
       timespec_get (&t, TIME_UTC);
@@ -109,8 +107,7 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
 
 // ================= Worker crew =================
 struct threadpool *
-threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void *global_data),
-                             void (*delete_local) (void *local_data, void *global_data))
+threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data))
 {
   struct threadpool *threadpool = calloc (1, sizeof (*threadpool));     // All attributes are set to 0 (including pointers).
   if (!threadpool)
@@ -124,20 +121,17 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   if (!(threadpool->running_worker_id = calloc (threadpool->max_nb_workers, sizeof (*threadpool->running_worker_id))))  // All set to 0.
     goto on_error;
   if (tss_create
-      (&threadpool->worker_local_data.reference,
-       0 /* The destructor of the thread-specific storage will be handled manually (see thread_worker_starter). */ ) != thrd_success)
+      (&threadpool->worker_local_data.reference, 0 /* The destructor of the thread-specific storage will be handled manually (see thread_worker_runner). */ ) != thrd_success)
     goto on_error;
   thrd_honored (mtx_init (&threadpool->mutex, mtx_plain));
   thrd_honored (cnd_init (&threadpool->proceed_or_conclude_or_runoff));
   threadpool->global_data = global_data;
   threadpool->worker_local_data.make = make_local;
   threadpool->worker_local_data.destroy = delete_local;
-  threadpool->nb_running_workers = 0;
-  threadpool->nb_idle_workers = 0;
   threadpool->in = threadpool->out = 0;
   threadpool->concluding = 0;
-  threadpool->nb_active_workers = 0;
-  threadpool->nb_processed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = threadpool->nb_canceled_tasks = 0;
+  threadpool->nb_running_workers = threadpool->nb_idle_workers = threadpool->nb_processing_tasks = threadpool->nb_succeeded_tasks =
+    threadpool->nb_failed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = threadpool->nb_canceled_tasks = 0;
   threadpool->monitor = 0;
   threadpool->monitoring = 0;
   timespec_get (&threadpool->t0, TIME_UTC);
@@ -188,13 +182,16 @@ thread_worker_runner (void *args)
       if (old_elem->task.work)
       {
         threadpool->nb_pending_tasks--;
-        threadpool->nb_active_workers++;        // The extracted data has to be processed somewhere.
+        threadpool->nb_processing_tasks++;      // The extracted data has to be processed somewhere.
         threadpool_monitor_call (threadpool);   // Processing worker
         thrd_honored (mtx_unlock (&threadpool->mutex));
-        old_elem->task.work (threadpool, old_elem->task.job);   //<<<<<<<<<< work <<<<<<<<<<< (N.B.: workers can add tasks by calling 'threadpool_add_task').
+        int ret = old_elem->task.work (threadpool, old_elem->task.job); //<<<<<<<<<< work <<<<<<<<<<< (N.B.: workers can add tasks by calling 'threadpool_add_task').
         thrd_honored (mtx_lock (&threadpool->mutex));
-        threadpool->nb_active_workers--;
-        threadpool->nb_processed_tasks++;
+        threadpool->nb_processing_tasks--;
+        if (ret)
+          threadpool->nb_failed_tasks++;
+        else
+          threadpool->nb_succeeded_tasks++;
       }
       if (old_elem->task.job_delete)    // MT-safe
         old_elem->task.job_delete (old_elem->task.job); // Get rid of job after use.
@@ -224,8 +221,7 @@ thread_worker_runner (void *args)
 }
 
 size_t
-threadpool_add_task (struct threadpool *threadpool,
-                     void (*work) (struct threadpool *threadpool, void *job), void *job, void (*job_delete) (void *job))
+threadpool_add_task (struct threadpool *threadpool, int (*work) (struct threadpool *threadpool, void *job), void *job, void (*job_delete) (void *job))
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
   struct elem *new_elem = malloc (sizeof (*new_elem));

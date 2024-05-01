@@ -12,12 +12,11 @@
 extern const size_t NB_CPU;
 extern const size_t SEQUENTIAL;
 struct threadpool *threadpool_create_and_start (size_t nb_workers,
-                                                void *global_data,
-                                                void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data));
+                                                void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data));
 
 // Call to 'threadpool_add_task' is MT-safe.
 // Tasks can be submitted to workers. They will be processed in parallel distributed over workers of the threadpool.
-// The submitted work is defined by the use defined function 'work'. 'work' should be made MT-safe.
+// The submitted work is the user defined function 'work'. 'work' should be made MT-safe. `work' should return 0 on success, non 0 otherwise.
 // The submitted job is defined by 'job'.
 //   - 'job' will be passed to 'work' when processed by a worker.
 //   - 'job' will be destroyed by a call to 'job_delete' once the job has been processed by the worker.
@@ -26,8 +25,7 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers,
 // Argument 'job_delete' is optional (see below).
 // Returns 0 on error, a unique id of the submitted task otherwise.
 // Set errno to ENOMEM on error (out of memory).
-size_t threadpool_add_task (struct threadpool *threadpool,
-                            void (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
+size_t threadpool_add_task (struct threadpool *threadpool, int (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
 
 // Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_TASKS, or the next submitted task if task_id is equal to NEXT_TASK, or the last if equal to LAST_TASK.
 // Returns the number of canceled tasks.
@@ -62,7 +60,7 @@ struct threadpool_monitor
 {
   struct threadpool *threadpool;        // Monitored Thread pool.
   float time;                   // Elapsed seconds since thread pool creation.
-  size_t max_nb_workers, nb_running_workers, nb_active_workers, nb_idle_workers, nb_processed_tasks, nb_pending_tasks, nb_canceled_tasks;       // Monitoring data.
+  size_t max_nb_workers, nb_idle_workers, nb_pending_tasks, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_canceled_tasks;        // Monitoring data.
 };
 typedef void (*threadpool_monitor_handler) (struct threadpool_monitor);
 // Set monitor handler.

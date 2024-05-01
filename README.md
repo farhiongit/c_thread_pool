@@ -76,7 +76,7 @@ The maximum number of workers can be defined higher than the number of CPUs as w
 
 ```c
 size_t threadpool_add_task (struct threadpool *threadpool,
-                            void (*work) (struct threadpool * threadpool, void *job),
+                            int (*work) (struct threadpool * threadpool, void *job),
                             void *job,
                             void (*job_delete) (void *job))
 ```
@@ -85,11 +85,12 @@ A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
 
 - The first argument `threadpool` is a thread pool returned by a previous call to `threadpool_create_and_start ()`.
 - The second argument `work` is a user defined function to be executed by a worker of the thread pool on `job`.
+  This function `work` should return 0 on success, non 0 otherwise.
   This function receives the thread pool and a pointer to a job as arguments.
   Therefore, `work` can itself call `threadpool_add_task`, `threadpool_global_data` or `threadpool_worker_local_data` if needed.
 - The third argument `job` is the data to be used by the task and that will be processed by `work`.
 
-The function returns a unique id of the submitted task, or 0 on error.
+The function `threadpool_add_task` returns a unique id of the submitted task, or 0 on error (with errno set to ENOMEM).
 
 ###### Options
 
@@ -152,24 +153,26 @@ void (*threadpool_monitor_handler) (struct threadpool_monitor)
 ```
 
 This handler will be called to retrieve and display information about the activity of the tread pool.
-The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
-
-- `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
-- `float time`: the elapsed seconds since the creation of the thread pool ;
-- `size_t max_nb_workers`: the maximum number of workers, as defined at the creation of the thread pool ;
-- `size_t nb_running_workers`: the number of running workers, either idle, or active ;
-- `size_t nb_active_workers`: the number of active workers, i.e. processing a task ;
-- `size_t nb_idle_workers`: the number of idle worker, i.e. waiting for a task to process ;
-- `size_t nb_pending_tasks`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
-- `size_t nb_processed_tasks`: the number of already processed tasks by the thread pool ;
-- `size_t nb_canceled_tasks`: the number of canceled tasks.
-
-This handler :
+It :
 
 - will be called when the state of the thread pool changes,
 - will be called asynchronously, without interfering with the execution of workers (actually, a sequential dedicated thread pool is used),
 - will be executed thread-safely,
 - will not be called not after `threadpool_wait_and_destroy` has been called.
+
+The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
+
+- `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
+- `float time`: the elapsed seconds since the creation of the thread pool ;
+- `size_t max_nb_workers`: the maximum number of workers, as defined at the creation of the thread pool ;
+- `size_t nb_processing_tasks`: the number of active workers, i.e. processing a task ;
+- `size_t nb_idle_workers`: the number of idle worker, i.e. waiting (some time) for a task to process ;
+- `size_t nb_pending_tasks`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
+- `size_t nb_succeeded_tasks`: the number of already processed and succeeded tasks by the thread pool
+  (a task is considered successful when `work`, the function passed to `threadpool_add_task`, returns 0) ;
+- `size_t nb_failed_tasks`: the number of already processed and failed tasks by the thread pool
+  (a task is considered failed when `work`, the function passed to `threadpool_add_task`, does not return 0) ;
+- `size_t nb_canceled_tasks`: the number of canceled tasks.
 
 ## Examples
 
@@ -206,7 +209,7 @@ wqm.o:000000000000062d T threadpool_worker_local_data
 qsip_wc.o:000000000000031a T qsip
 ./qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times...
-(=) processed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.
+(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.
 [0x5baf7c61c860][    0.0000s]        
 [0x5baf7c61c860][    0.0001s] .       
 [0x5baf7c61c860][    0.0002s] ..       

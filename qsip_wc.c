@@ -102,40 +102,8 @@ swap (void *a, void *b, size_t size, void *temp)
   memcpy (b, temp, size);
 }
 
-static void *
-lomuto (Job *job, GlobalData *g, LocalData *l)
-{
-  int32_t result = job->nmemb / 2;      // Magical number 2 :(
-#ifndef FIXED_PIVOT
-  random_r (&l->rpg_state, &result);
-#endif
-  void *pivot = job->base + (g->elem_size * (result % job->nmemb));     // Select the pivot
-  void *next_to_pivot = pivot + g->elem_size;
-  for (void *elem = job->base; elem < pivot; elem += g->elem_size)
-    if (g->elem_lt (pivot, elem, g->elem_lt_arg))       // *pivot < *elem
-    {
-      swap (pivot - g->elem_size, elem, g->elem_size, l->temp);
-      swap (pivot, pivot - g->elem_size, g->elem_size, l->temp);
-      l->nb_swaps += 2;
-      l->nb_cmp++;
-      pivot -= g->elem_size;
-      elem -= g->elem_size;
-    }
-  for (void *elem = next_to_pivot; elem < job->base + (g->elem_size * job->nmemb); elem += g->elem_size)
-    if (g->elem_lt (elem, pivot, g->elem_lt_arg))       // *pivot > *elem
-    {
-      swap (pivot + g->elem_size, elem, g->elem_size, l->temp);
-      swap (pivot, pivot + g->elem_size, g->elem_size, l->temp);
-      l->nb_swaps += 2;
-      l->nb_cmp++;
-      pivot += g->elem_size;
-    }
-  // elements equal to pivot (*pivot == *elem) are left where they are.
-  return pivot;
-}
-
 static void
-lomuto2 (Job *job, GlobalData *g, LocalData *l, void **lt, void **gt)
+lomuto (Job *job, GlobalData *g, LocalData *l, void **lt, void **gt)
 {
   int32_t result = job->nmemb / 2;      // Magical number 2 :(
 #ifndef FIXED_PIVOT
@@ -212,7 +180,7 @@ hoare (Job *job, GlobalData *g, LocalData *l)
   return pj;
 }
 
-static void
+static int
 work (struct threadpool *threadpool, void *j)
 {
   Job *job = j;
@@ -222,9 +190,8 @@ work (struct threadpool *threadpool, void *j)
     LocalData *l = threadpool_worker_local_data (threadpool);
     GlobalData *g = threadpool_global_data (threadpool);
     void *p1, *p2;
-    //p1 = p2 = hoare (job, g, l);    //<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    //p1 = p2 = lomuto (job, g, l);   //<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    lomuto2 (job, g, l, &p1, &p2);      //<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    //p1 = p2 = hoare (job, g, l);
+    lomuto (job, g, l, &p1, &p2);
     Job *new_job1 = job_create ((Job) {
                                 .base = job->base,.nmemb = (p1 - job->base) / g->elem_size,
                                 });
@@ -240,6 +207,7 @@ work (struct threadpool *threadpool, void *j)
     DPRINTF ("Job         (%1$p, %2$'zu) made %3$'zu swaps.\n", job->base, job->nmemb, l->nb_swaps);
   }                             // if (data.nmemb >= 2)
   DPRINTF ("Job         (%1$p, %2$'zu) processed.\n", job->base, job->nmemb);
+  return 0;
 }
 
 // ================= Entry point =================
