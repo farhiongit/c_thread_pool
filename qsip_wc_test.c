@@ -64,21 +64,23 @@ monitoring (struct threadpool_monitor data)
 {
   static int legend = 0;
   if (!legend)
-    legend = fprintf (stdout, "(=) processed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.\n");
+    legend = fprintf (stdout, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.\n");
   static char gauge = '\r';
   static char roll = '\n';
   (void) (roll + gauge);
   fprintf (stdout, "[%p][% 10.4fs] ", data.threadpool, data.time);
   size_t i;
-  for (i = 0; i < data.nb_processed_tasks; i++)
+  for (i = 0; i < data.nb_succeeded_tasks; i++)
     fprintf (stdout, "=");
-  for (i = 0; i < data.nb_active_workers; i++)
+  for (i = 0; i < data.nb_failed_tasks; i++)
+    fprintf (stdout, "X");
+  for (i = 0; i < data.nb_processing_tasks; i++)
     fprintf (stdout, "*");
   for (i = 0; i < data.nb_pending_tasks; i++)
     fprintf (stdout, ".");
   for (i = 0; i < data.nb_canceled_tasks; i++)
     fprintf (stdout, "x");
-  for (i = data.nb_active_workers; i < data.nb_active_workers + data.nb_idle_workers; i++)
+  for (i = 0; i < data.nb_idle_workers; i++)
     fprintf (stdout, "-");
   for (i = 0; i < data.max_nb_workers; i++)
     fprintf (stdout, " ");
@@ -86,10 +88,10 @@ monitoring (struct threadpool_monitor data)
   fflush (stdout);
 }
 
-static void
+static int
 worker (struct threadpool *threadpool, void *base)
 {
-  int lret = EXIT_SUCCESS;
+  int ret = 0;
   (void) cmpi;                  // Avoid ‘cmpi’ defined but not used
 #if 1
   struct gd *gd = threadpool_global_data (threadpool);
@@ -100,15 +102,15 @@ worker (struct threadpool *threadpool, void *base)
 #  endif
   // Check base[i] <= base[i + 1]
   SortableType *st = base;
-  for (size_t i = 0; i < gd->size - 1 && lret == EXIT_SUCCESS; i++)
+  for (size_t i = 0; i < gd->size - 1 && ret == 0; i++)
     if (lti (&st[i + 1], &st[i], 0))
-      lret = EXIT_FAILURE;
+      ret = 1;
 #else
   sleep (1);
 #endif
-  assert (lret == EXIT_SUCCESS);
   char *tag = threadpool_worker_local_data (threadpool);
   (void) tag;
+  return ret;
 }
 
 int
