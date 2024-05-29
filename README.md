@@ -11,7 +11,7 @@ The thread pool pattern allows to run parallel tasks easily without the burden o
 The user:
 
 1. declares a thread pool and chooses the maximum number of parallel workers in charge of the execution of tasks (`threadpool_create_and_start ()`) ;
-2. submits tasks to the thread pool that will pass it to one of the available workers (`threadpool_add_task ()`) ;
+2. submits tasks to the thread pool that will pass it to one of available workers (`threadpool_add_task ()`) and will be executed asynchronously;
 3. waits for all the tasks to be completed (`threadpool_wait_and_destroy ()`).
 
 ### Files
@@ -31,6 +31,8 @@ The user:
 | `threadpool_cancel_task` | Cancel all pending tasks, the last or next submitted task, or a specific task |
 | `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
 
+Those features are detailed below.
+
 #### Advanced functionalities
 
 | Function | Description |
@@ -38,6 +40,22 @@ The user:
 | `threadpool_global_data` | Access the user defined shared global data of the pool of workers |
 | `threadpool_worker_local_data` | Access the user defined local data of a worker |
 | `threadpool_set_monitor` | Set a user-defined function to retrieve and display monitoring information |
+
+Those features are detailed below.
+
+## Unique features
+
+This implementation of a thread pool brings unique features, not found anywhere else at the time of writing.
+
+1. It uses the standard (minimalist) C11 thread library <threads.h>, rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
+1. The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user defined function `job_delete ()`), allowing collecting data at task termination.
+1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
+1. Local data can be defined and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
+1. The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
+1. Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
+
+Those features are detailed below.
 
 ## Detailed API
 
@@ -55,7 +73,7 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers,
 A thread pool is declared and started with a call to `threadpool_create_and_start ()`.
 
 The first argument `nb_workers` is the number of required workers, that is the maximum number of tasks that can be executed in parallel by the system.
-- `NB_CPU` can be used as first argument to fit to the number of processors currently available in the system (as returned by `get_nprocs ()`).
+- `NB_CPU` can be used as first argument to fit to the number of processors currently available in the system (as returned by `get_nprocs ()` with GNU C standard library).
 - `SEQUENTIAL` can be used as first argument to create a sequential thread pool: tasks will be executed asynchronously, one at a time, and in the order there were submitted. 
 
 The maximum number of workers can be defined higher than the number of CPUs as workers will be started only when solicited and will be released when unused after an idle time.
@@ -66,10 +84,10 @@ The maximum number of workers can be defined higher than the number of CPUs as w
   This pointer can next be retrieved by tasks with the function `threadpool_global_data ()`.
 - The third argument `make_local`, if not null, is a user defined function that returns a pointer to data for a local usage by a worker.
   This pointer can next be retrieved by tasks with the function `threadpool_worker_local_data ()`.
-  `make_local` is called in a thread-safe manner at the initialization of a worker and is passed the pointer to global data.
+  `make_local` is called in a multi-thread-safe manner at the initialization of a worker and is passed the pointer to global data.
   `make_local` can therefore safely access (and update) the content of `global_data` if needed.
 - The fourth argument `delete_local`, if not null, is a user defined function that is executed to release and destroys the local data used by each worker (passed as an argument) when a worker stops.
-  `delete_local` is called in a thread-safe manner at the termination of a worker and is passed the pointer to global data.
+  `delete_local` is called in a multi-thread-safe manner at the termination of a worker and is passed the pointer to global data.
   `delete_local` can therefore safely access (and update) the content of `global_data` if needed (to gather results or statistics for instance).
 
 ### 2. Submit a task
@@ -87,7 +105,7 @@ A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
 - The second argument `work` is a user defined function to be executed by a worker of the thread pool on `job`.
   This function `work` should return 0 on success, non 0 otherwise.
   This function receives the thread pool and a pointer to a job as arguments.
-  Therefore, `work` can itself call `threadpool_add_task`, `threadpool_global_data` or `threadpool_worker_local_data` if needed.
+  Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task`, `threadpool_global_data` or `threadpool_worker_local_data` if needed.
 - The third argument `job` is the data to be used by the task and that will be processed by `work`.
 
 The function `threadpool_add_task` returns a unique id of the submitted task, or 0 on error (with errno set to ENOMEM).
@@ -96,21 +114,23 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 
 - The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task.
   This function receives the job of the task as an argument.
-  It is called in a thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance. 
+  It is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance (in a map and reduce pattern for instance).
 
 `job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after use.
-`free ()` is a possible choice for `job_delete`.
+`job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it would then not be executed multi-thread-safely, forbidding any aggregation.
 
-`job_delete` can also be used to do more than simply release jobs, for instance to retrieve data used and possibly modified by the processed task in a thread-safe manner. 
-For instance, a job could be declared as a structure containing the input data of the task and its result.
-The result could then be retrieved by the user defined function `job_delete` in a multi-thread safe manner and aggregated in a global result. 
-
+`free ()` is the simplest possible choice for `job_delete`.
+But `job_delete` can also be used to do more than simply release jobs, to retrieve data used and possibly modified by the processed task in a multi-thread-safe manner.
+For instance, a job could be declared as a structure containing the `input` data of the task and its `result`.
 ```c
 typedef struct {
   struct { ... } input;
   struct { ... } result;
 } job;
 ```
+
+The `result` could then be retrieved by the user defined function `job_delete` in a multi-thread-safe manner and aggregated in a global result.
+
 ### 3. Cancel tasks
 
 ```c
@@ -157,7 +177,7 @@ It :
 
 - will be called when the state of the thread pool changes,
 - will be called asynchronously, without interfering with the execution of workers (actually, a sequential dedicated thread pool is used),
-- will be executed thread-safely,
+- will be executed multi-thread-safely,
 - will not be called not after `threadpool_wait_and_destroy` has been called.
 
 The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
@@ -225,27 +245,17 @@ Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times...
 [0x5baf7c61c860][   21.1596s] ==================================================================================xxxxxxxxxxxxxxxxxx       
 ```
 
-## Implementation details
+## Implementation
 
-The API is implemented in C11 (file `wqm.c`).
+The API is implemented in C11 (file `wqm.c`) using the standard C thread library <threads.h>.
 It is highly inspired from the great book "Programming with POSIX Threads" written by David R. Butenhof, 21st ed., 2008, Addison Wesley.
 
-### Features
-
-Compared to Butenhof's, it yields extra features:
-
-1. It uses the standard (minimalist) thread C11 library, rather the POSIX threads.
-1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
-1. Local data can be defined and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
-1. The data passed to tasks can be accessed and released in a thread-safe manner after completion of the task (via the user defined function `job_delete ()`).
-1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, in case another task still being processed would create new tasks dynamically.
-1. The activity of the thread pool can be monitored and displayed by a front-end user defined function.
-1. Pending tasks can be canceled after submission.
+It has been heavily tested, but bugs are still possible. Please don't hesitate to report them to me.
 
 ### Management of workers
 
 Workers are started automatically when needed, that is when a new task is submitted whereas all workers are already booked.
-Workers are running in parallel.
+Workers are running in parallel, asynchronously.
 Each worker can process a task at a time. A task is processed as soon as a worker is available.
 
 A worker stops when all submitted tasks have been processed or after an idle time (half a second).

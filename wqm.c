@@ -16,7 +16,9 @@
 // N.B.: Once done, a FIFO cannot be undone by design: there aren't any data being processed left, that could have called 'threadpool_add_task' and refilled the empty FIFO (see loop in 'thread_worker_starter').
 #define threadpool_runoff_predicate(threadpool) (threadpool_is_done_predicate(threadpool) && (threadpool)->nb_running_workers == 0)
 
+#ifdef __GLIBC__
 size_t const NB_CPU = 0;
+#endif
 size_t const SEQUENTIAL = 1;
 size_t const ALL_TASKS = SIZE_MAX - 2;
 size_t const NEXT_TASK = SIZE_MAX - 1;
@@ -113,7 +115,9 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   if (!threadpool)
     goto on_error;
   if (nb_workers == 0)
+#ifdef __GLIBC__
     if (!(nb_workers = get_nprocs ()))
+#endif
       goto on_error;
   threadpool->max_nb_workers = nb_workers;
   if (!(threadpool->worker_id = malloc (threadpool->max_nb_workers * sizeof (*threadpool->worker_id))))

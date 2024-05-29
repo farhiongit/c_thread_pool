@@ -4,12 +4,15 @@
 #ifndef __THREADPOOL_H__
 #  define __THREADPOOL_H__
 #  include <stddef.h>
+#  include <stdio.h>
 
 // 'threadpool_create_and_start' creates a threadpool of 'nb_workers' workers.
 // If 'nb_workers' is 0 or 'NB_CPU', the number of workers is set equal to the number of available CPUs.
 // Arguments 'global_data', 'make_local', 'delete_local' are optional (see below).
 // Returns 0 (with errno = ENOMEM) on error, a pointer to the created threadpool otherwise (with errno = ENOMEM if not all required workers could be created).
+#ifdef __GLIBC__
 extern const size_t NB_CPU;
+#endif
 extern const size_t SEQUENTIAL;
 struct threadpool *threadpool_create_and_start (size_t nb_workers,
                                                 void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data));
