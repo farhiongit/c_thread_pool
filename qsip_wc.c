@@ -7,7 +7,9 @@
 // -DDEBUG: For debugging purpose only.
 // Compile options for algorithm:
 // ================= Quick sort in place =================
+#define _DEFAULT_SOURCE         // For initstate_r
 #include "wqm.h"
+#include "qsip_wc.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -67,13 +69,14 @@ static void *
 local_data_create (void *vg)    // Called at worker initialization
 {
   GlobalData *g = vg;
-  LocalData *l = calloc (1, sizeof (*l));       // calloc, for rpg_state to be initialized to 0 (see initstate_r).
+  LocalData *l = malloc (sizeof (*l));
   EXEC_OR_ABORT (l);
   l->nb_swaps = l->nb_cmp = 0;
   l->temp = malloc (g->elem_size);
   EXEC_OR_ABORT (l->temp);
 #ifndef FIXED_PIVOT
   errno = 0;
+  l->rpg_state.state = 0;       // the buf.state field must be initialized to 0 before use (see initstate_r).
   initstate_r ((unsigned int) (intptr_t) l, random_statebuf, sizeof (random_statebuf) / sizeof (*random_statebuf), &l->rpg_state);
   EXEC_OR_ABORT (!errno);
 #endif
@@ -105,11 +108,11 @@ swap (void *a, void *b, size_t size, void *temp)
 static void
 lomuto (Job *job, GlobalData *g, LocalData *l, void **lt, void **gt)
 {
-  int32_t result = job->nmemb / 2;      // Magical number 2 :(
+  int32_t result = (int32_t) (job->nmemb / 2);  // Magical number 2 :(
 #ifndef FIXED_PIVOT
   random_r (&l->rpg_state, &result);
 #endif
-  void *pi = job->base + (g->elem_size * (result % job->nmemb));        // Select the pivot
+  void *pi = job->base + (g->elem_size * ((size_t) result % job->nmemb));       // Select the pivot
   swap (job->base, pi, g->elem_size, l->temp);
   pi = job->base;
   l->nb_swaps++;
@@ -144,13 +147,13 @@ lomuto (Job *job, GlobalData *g, LocalData *l, void **lt, void **gt)
 static void *
 hoare (Job *job, GlobalData *g, LocalData *l)
 {
-  int32_t result = job->nmemb / 2;      // Magical number 2 :(
+  int32_t result = (int32_t) (job->nmemb / 2);  // Magical number 2 :(
 #ifndef FIXED_PIVOT
   random_r (&l->rpg_state, &result);
 #endif
   void *pi, *pj, *pn, *a;
   a = job->base;
-  pi = a + (g->elem_size * (result % job->nmemb));      // Select the pivot
+  pi = a + (g->elem_size * ((size_t) result % job->nmemb));     // Select the pivot
   swap (a, pi, g->elem_size, l->temp);
   l->nb_swaps++;
   pi = a;
@@ -190,16 +193,18 @@ work (struct threadpool *threadpool, void *j)
     LocalData *l = threadpool_worker_local_data (threadpool);
     GlobalData *g = threadpool_global_data (threadpool);
     void *p1, *p2;
-    //p1 = p2 = hoare (job, g, l);
+    (void) hoare;               //p1 = p2 = hoare (job, g, l);
     lomuto (job, g, l, &p1, &p2);
+    TEST_OR_ABORT (p1 >= job->base && p1 < job->base + job->nmemb * g->elem_size);
+    TEST_OR_ABORT (p2 >= job->base && p2 < job->base + job->nmemb * g->elem_size);
     Job *new_job1 = job_create ((Job) {
-                                .base = job->base,.nmemb = (p1 - job->base) / g->elem_size,
+                                .base = job->base,.nmemb = (typeof (job->nmemb)) (p1 - job->base) / g->elem_size,
                                 });
     EXEC_OR_ABORT (new_job1);
     DPRINTF ("Job         (%1$p, %2$'zu) to be added to jobs ...\n", new_job1->base, new_job1->nmemb);
     threadpool_add_task (threadpool, work, new_job1, free);
     Job *new_job2 = job_create ((Job) {
-                                .base = p2 + g->elem_size,.nmemb = job->nmemb - 1 - ((p2 - job->base) / g->elem_size),
+                                .base = p2 + g->elem_size,.nmemb = job->nmemb - 1 - ((typeof (job->nmemb)) (p2 - job->base) / g->elem_size),
                                 });
     EXEC_OR_ABORT (new_job2);
     DPRINTF ("Job         (%1$p, %2$'zu) to be added to jobs ...\n", new_job2->base, new_job2->nmemb);
@@ -221,6 +226,8 @@ qsip (void *base, size_t nmemb, size_t size, int (*lt) (const void *, const void
   }
   if (!base)
     return EXIT_SUCCESS;
+
+  (void) arg;
 
 #ifdef FIXED_PIVOT
   DPRINTF (_(" [Fixed pivot (in the middle)]\n"));
