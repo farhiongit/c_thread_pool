@@ -88,7 +88,7 @@ threadpool_monitor_call (struct threadpool *threadpool)
       }
       t.tv_sec -= threadpool->t0.tv_sec;
       t.tv_nsec -= threadpool->t0.tv_nsec;
-      p->time = t.tv_sec + t.tv_nsec / 1e9;
+      p->time = (double) t.tv_sec + (double) t.tv_nsec / 1e9;
       threadpool_add_task (threadpool->monitoring, threadpool_monitor_exec, p, free);
     }
   }
@@ -116,7 +116,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
     goto on_error;
   if (nb_workers == 0)
 #ifdef __GLIBC__
-    if (!(nb_workers = get_nprocs ()))
+    if (!(nb_workers = (size_t) get_nprocs ()))
 #endif
       goto on_error;
   threadpool->max_nb_workers = nb_workers;
@@ -235,7 +235,7 @@ threadpool_add_task (struct threadpool *threadpool, int (*work) (struct threadpo
     errno = ENOMEM;
     return 0;
   }
-  struct task task = { job, work, job_delete };
+  struct task task = {.job = job,.work = work,.job_delete = job_delete };
   new_elem->task = task;
   new_elem->next = 0;
   if (!threadpool->in)

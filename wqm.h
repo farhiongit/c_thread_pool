@@ -10,9 +10,9 @@
 // If 'nb_workers' is 0 or 'NB_CPU', the number of workers is set equal to the number of available CPUs.
 // Arguments 'global_data', 'make_local', 'delete_local' are optional (see below).
 // Returns 0 (with errno = ENOMEM) on error, a pointer to the created threadpool otherwise (with errno = ENOMEM if not all required workers could be created).
-#ifdef __GLIBC__
+#  ifdef __GLIBC__
 extern const size_t NB_CPU;
-#endif
+#  endif
 extern const size_t SEQUENTIAL;
 struct threadpool *threadpool_create_and_start (size_t nb_workers,
                                                 void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data));
@@ -62,7 +62,7 @@ void *threadpool_worker_local_data (struct threadpool *threadpool);
 struct threadpool_monitor
 {
   struct threadpool *threadpool;        // Monitored Thread pool.
-  float time;                   // Elapsed seconds since thread pool creation.
+  double time;                  // Elapsed seconds since thread pool creation.
   size_t max_nb_workers, nb_idle_workers, nb_pending_tasks, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_canceled_tasks;        // Monitoring data.
 };
 typedef void (*threadpool_monitor_handler) (struct threadpool_monitor);

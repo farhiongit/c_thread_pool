@@ -28,7 +28,8 @@ typedef long long int SortableType;
 static int
 lti (const void *a, const void *b, void *arg)
 {
-  return ((*(SortableType *) a)) < ((*(SortableType *) b));
+  (void) arg;
+  return ((*(const SortableType *) a)) < ((*(const SortableType *) b));
 }
 
 static int
@@ -56,19 +57,20 @@ tag (void *global)
 static void
 untag (void *local, void *global)
 {
+  (void) local;
   ((struct gd *) global)->tags--;
 }
 
-void
+static void
 monitoring (struct threadpool_monitor data)
 {
   static int legend = 0;
   if (!legend)
-    legend = fprintf (stdout, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (x) canceled tasks, (-) idle workers.\n");
+    legend = fprintf (stdout, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.\n");
   static char gauge = '\r';
   static char roll = '\n';
   (void) (roll + gauge);
-  fprintf (stdout, "[%p][% 10.4fs] ", data.threadpool, data.time);
+  fprintf (stdout, "[%p][% 10.4fs] ", (void *) data.threadpool, data.time);
   size_t i;
   for (i = 0; i < data.nb_succeeded_tasks; i++)
     fprintf (stdout, "=");
@@ -79,7 +81,7 @@ monitoring (struct threadpool_monitor data)
   for (i = 0; i < data.nb_pending_tasks; i++)
     fprintf (stdout, ".");
   for (i = 0; i < data.nb_canceled_tasks; i++)
-    fprintf (stdout, "x");
+    fprintf (stdout, "/");
   for (i = 0; i < data.nb_idle_workers; i++)
     fprintf (stdout, "-");
   for (i = 0; i < data.max_nb_workers; i++)
@@ -124,7 +126,7 @@ main ()
 #ifndef REPRODUCTIBLE
   struct timespec ts;
   clock_gettime (CLOCK_MONOTONIC, &ts);
-  srandom (ts.tv_nsec);
+  srandom ((unsigned int) ts.tv_nsec);
 #else
   fprintf (stdout, _(" [Reproductible]\n"));
 #endif
@@ -135,7 +137,7 @@ main ()
   struct gd gd = { (size_t) SIZE, ELEM_SIZE (base), threads_tags };
   struct threadpool *tp = threadpool_create_and_start (strlen (threads_tags), &gd, tag, untag); // Start 7 workers
   threadpool_set_monitor (tp, monitoring);
-  int i = 0;
+  size_t i = 0;
   size_t task_id;
   for (; i < ((size_t) TIMES) / 2; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
