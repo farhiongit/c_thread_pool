@@ -122,7 +122,7 @@ main ()
   /*alignas(128) */
   SortableType *base = malloc (((size_t) TIMES) * ((size_t) SIZE) * sizeof (*base));    // Beware of false sharing.
   assert (base);
-  fprintf (stdout, _("Sorting %1$'zu elements (multi-threaded quick sort in place), %2$'i times...\n"), (size_t) SIZE, TIMES);
+  fprintf (stdout, _("Sorting %1$'zu elements (multi-threaded quick sort in place), %2$'i times:\n"), (size_t) SIZE, TIMES);
 #ifndef REPRODUCTIBLE
   struct timespec ts;
   clock_gettime (CLOCK_MONOTONIC, &ts);
@@ -130,12 +130,15 @@ main ()
 #else
   fprintf (stdout, _(" [Reproductible]\n"));
 #endif
+  fprintf (stdout, _("Initializing %'zu random numbers...\n"), (size_t) (TIMES * SIZE));
   for (size_t i = 0; i < (size_t) TIMES; i++)
     for (size_t j = 0; j < (size_t) SIZE; j++)
       base[i * (size_t) SIZE + j] = ((1LL << 31) * random () + random ()) % (1LL << i);
   char threads_tags[] = "1234567";      // 7 workers
   struct gd gd = { (size_t) SIZE, ELEM_SIZE (base), threads_tags };
-  struct threadpool *tp = threadpool_create_and_start (strlen (threads_tags), &gd, tag, untag); // Start 7 workers
+  size_t nb_workers = strlen (threads_tags);
+  fprintf (stdout, _("%zu workers requested and processing...\n"), nb_workers);
+  struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd, tag, untag);    // Start 7 workers
   threadpool_set_monitor (tp, monitoring);
   size_t i = 0;
   size_t task_id;
@@ -156,6 +159,6 @@ main ()
   sleep (1);
   threadpool_cancel_task (tp, ALL_TASKS);
   threadpool_wait_and_destroy (tp);
-  fprintf (stdout, "\n");
+  fprintf (stdout, _("Done.\n"));
   free (base);
 }
