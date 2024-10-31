@@ -51,7 +51,10 @@ struct threadpool
   int concluding;               // Indicates that 'threadpool_wait_and_destroy' has been called. Only workers can now add tasks (in 'thread_worker_starter').
   cnd_t proceed_or_conclude_or_runoff;  // Associated with 3 exclusive predicates.
   // Monitoring
-  void (*monitor) (struct threadpool_monitor);
+  struct {
+    void (*f) (struct threadpool_monitor, void *a);
+    void *a;
+  } monitor;
   struct threadpool *monitoring;
   struct timespec t0;
 };
@@ -60,15 +63,15 @@ struct threadpool
 static int
 threadpool_monitor_exec (struct threadpool *monitoring, void *data)
 {
-  if (((struct threadpool *) threadpool_global_data (monitoring))->monitor)
-    ((struct threadpool *) threadpool_global_data (monitoring))->monitor (*(struct threadpool_monitor *) data);
+  if (((struct threadpool *) threadpool_global_data (monitoring))->monitor.f)
+    ((struct threadpool *) threadpool_global_data (monitoring))->monitor.f (*(struct threadpool_monitor *) data, ((struct threadpool *) threadpool_global_data (monitoring))->monitor.a);
   return 0;
 }
 
 static void
 threadpool_monitor_call (struct threadpool *threadpool)
 {
-  if (threadpool->monitor && threadpool->monitoring)
+  if (threadpool->monitor.f && threadpool->monitoring)
   {
     struct threadpool_monitor *p = malloc (sizeof (*p));
     if (p)
@@ -94,19 +97,45 @@ threadpool_monitor_call (struct threadpool *threadpool)
   }
 }
 
-threadpool_monitor_handler
-threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new)
+void
+threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new, void *a)
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
-  threadpool_monitor_handler old = threadpool->monitor;
-  threadpool->monitor = new;
+  threadpool->monitor.f = new;
+  threadpool->monitor.a = a;
   if (new && !threadpool->monitoring)
     threadpool->monitoring = threadpool_create_and_start (SEQUENTIAL, threadpool, 0, 0);
   threadpool_monitor_call (threadpool);
   thrd_honored (mtx_unlock (&threadpool->mutex));
-  return old;
 }
 
+void
+threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream)
+{
+  struct
+  {
+    size_t upper;
+    char c;
+  } datas[] = { {data.nb_succeeded_tasks, '='}, {data.nb_failed_tasks, 'X'}, {data.nb_processing_tasks, '*'},
+  {data.nb_pending_tasks, '.'}, {data.nb_canceled_tasks, '/'}, {data.nb_idle_workers, '-'},
+  {data.max_nb_workers, ' '}
+  };
+  static FILE *f = 0;
+  if (!f)
+    f = FILE_stream ? FILE_stream : stderr;
+  static int legend = 0;
+  if (!legend)
+    legend = fprintf (f, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.\n");
+  static char gauge = '\r';
+  static char roll = '\n';
+  (void) (roll + gauge);
+  fprintf (f, "[%p][% 10.4fs] ", (void *) data.threadpool, data.time);
+  for (size_t j = 0; j < sizeof (datas) / sizeof (*datas); j++)
+    for (size_t i = 0; i < datas[j].upper; i++)
+      fprintf (f, "%c", datas[j].c);
+  fprintf (f, "%c", roll);      // Use gauge, rather than roll, to display a progress bar.
+  fflush (f);
+}
 // ================= Worker crew =================
 struct threadpool *
 threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data))
@@ -136,7 +165,8 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   threadpool->concluding = 0;
   threadpool->nb_running_workers = threadpool->nb_idle_workers = threadpool->nb_processing_tasks = threadpool->nb_succeeded_tasks =
     threadpool->nb_failed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = threadpool->nb_canceled_tasks = 0;
-  threadpool->monitor = 0;
+  threadpool->monitor.f = 0;
+  threadpool->monitor.a = 0;
   threadpool->monitoring = 0;
   timespec_get (&threadpool->t0, TIME_UTC);
   return threadpool;

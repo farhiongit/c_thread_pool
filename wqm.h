@@ -65,9 +65,12 @@ struct threadpool_monitor
   double time;                  // Elapsed seconds since thread pool creation.
   size_t max_nb_workers, nb_idle_workers, nb_pending_tasks, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_canceled_tasks;        // Monitoring data.
 };
-typedef void (*threadpool_monitor_handler) (struct threadpool_monitor);
+typedef void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg);
 // Set monitor handler.
-// Returns previously set monitor handler.
 // Monitor handler will be called asynchronously (without interfering with the execution of workers) and executed thread-safely and not after `threadpool_wait_and_destroy` has been called.
-threadpool_monitor_handler threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new);
+void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new, void *arg);
+
+// A monitor handler to FILE stream.
+void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream);
 #endif
+

@@ -106,9 +106,10 @@ A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
   This function `work` should return 0 on success, non 0 otherwise.
   This function receives the thread pool and a pointer to a job as arguments.
   Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task`, `threadpool_global_data` or `threadpool_worker_local_data` if needed.
-- The third argument `job` is the data to be used by the task and that will be processed by `work`.
+- The third argument `job` is a pointer to the data to be used by the task and that will be processed by `work`.
+  The data pointed to by `job` should not be deallocated before `threadpool_wait_and_destroy` is called.
 
-The function `threadpool_add_task` returns a unique id of the submitted task, or 0 on error (with errno set to ENOMEM).
+The function `threadpool_add_task` returns a unique id of the submitted task, or 0 on error (with `errno` set to `ENOMEM`).
 
 ###### Options
 
@@ -164,21 +165,22 @@ It then waits for all the tasks to be completed by workers.
 
 A monitoring of the thread pool activity can optionally be activated by calling
 ```c
-threadpool_monitor_handler threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new)
+void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new, void *arg)
 ```
 
 A user-defined handler function is passed as second argument, with signature
 ```c
-void (*threadpool_monitor_handler) (struct threadpool_monitor)
+void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg)
 ```
 
 This handler will be called to retrieve and display information about the activity of the tread pool.
 It :
 
-- will be called when the state of the thread pool changes,
+- will be called whenever the state of the thread pool changes,
+- will be passed the argument `arg` previously passed to `threadpool_set_monitor` as third (be it not null) argument,
 - will be called asynchronously, without interfering with the execution of workers (actually, a sequential dedicated thread pool is used),
 - will be executed multi-thread-safely,
-- will not be called not after `threadpool_wait_and_destroy` has been called.
+- will not be called after `threadpool_wait_and_destroy` has been called.
 
 The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
 
@@ -193,6 +195,13 @@ The monitoring data are passed to the handler function in a structure `threadpoo
 - `size_t nb_failed_tasks`: the number of already processed and failed tasks by the thread pool
   (a task is considered failed when `work`, the function passed to `threadpool_add_task`, does not return 0) ;
 - `size_t nb_canceled_tasks`: the number of canceled tasks.
+
+A handler `threadpool_monitor_to_terminal` is available for convenience.
+It monitors to `FILE_stream` of type `FILE *`, and `stderr` if `FILE_stream` is null.
+
+```c
+void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream)
+```
 
 ## Examples
 

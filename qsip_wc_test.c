@@ -61,35 +61,6 @@ untag (void *local, void *global)
   ((struct gd *) global)->tags--;
 }
 
-static void
-monitoring (struct threadpool_monitor data)
-{
-  static int legend = 0;
-  if (!legend)
-    legend = fprintf (stdout, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.\n");
-  static char gauge = '\r';
-  static char roll = '\n';
-  (void) (roll + gauge);
-  fprintf (stdout, "[%p][% 10.4fs] ", (void *) data.threadpool, data.time);
-  size_t i;
-  for (i = 0; i < data.nb_succeeded_tasks; i++)
-    fprintf (stdout, "=");
-  for (i = 0; i < data.nb_failed_tasks; i++)
-    fprintf (stdout, "X");
-  for (i = 0; i < data.nb_processing_tasks; i++)
-    fprintf (stdout, "*");
-  for (i = 0; i < data.nb_pending_tasks; i++)
-    fprintf (stdout, ".");
-  for (i = 0; i < data.nb_canceled_tasks; i++)
-    fprintf (stdout, "/");
-  for (i = 0; i < data.nb_idle_workers; i++)
-    fprintf (stdout, "-");
-  for (i = 0; i < data.max_nb_workers; i++)
-    fprintf (stdout, " ");
-  fprintf (stdout, "%c", roll); // Use gauge, rather than roll, to display a progress bar.
-  fflush (stdout);
-}
-
 static int
 worker (struct threadpool *threadpool, void *base)
 {
@@ -139,12 +110,14 @@ main ()
   size_t nb_workers = strlen (threads_tags);
   fprintf (stdout, _("%zu workers requested and processing...\n"), nb_workers);
   struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd, tag, untag);    // Start 7 workers
-  threadpool_set_monitor (tp, monitoring);
+  threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0);
   size_t i = 0;
   size_t task_id;
+  fprintf (stdout, _("Will go to sleep in %i seconds...\n"), TIMES / 6);
   for (; i < ((size_t) TIMES) / 2; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (TIMES / 6);
+  fprintf (stdout, _("Stop sleeping after %i seconds.\n"), TIMES / 6);
   for (; i < (size_t) TIMES; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (1);
