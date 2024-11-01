@@ -113,7 +113,7 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 
 ###### Options
 
-- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](cancel-tasks).)
+- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#3-cancel-tasks).)
   This function receives the `job` of the task as an argument.
 
 `job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after use.
