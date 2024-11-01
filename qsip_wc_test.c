@@ -81,7 +81,7 @@ worker (struct threadpool *threadpool, void *base)
 #else
   sleep (1);
 #endif
-  char *tag = threadpool_worker_local_data (threadpool);
+  char *tag = threadpool_worker_local_data ();
   (void) tag;
   return ret;
 }

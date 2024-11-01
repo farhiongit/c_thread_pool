@@ -104,8 +104,8 @@ A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
 - The first argument `threadpool` is a thread pool returned by a previous call to `threadpool_create_and_start ()`.
 - The second argument `work` is a user defined function to be executed by a worker of the thread pool on `job`.
   This function `work` should return 0 on success, non 0 otherwise.
-  This function receives the thread pool and a pointer to a job as arguments.
-  Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task`, `threadpool_global_data` or `threadpool_worker_local_data` if needed.
+  This function receives the thread pool `threadpool` and the job `job` as arguments, as they were passed to `threadpool_add_task`.
+  Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task` or `threadpool_global_data` if needed.
 - The third argument `job` is a pointer to the data to be used by the task and that will be processed by `work`.
   The data pointed to by `job` should not be deallocated before `threadpool_wait_and_destroy` is called.
 
@@ -118,10 +118,10 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 
 `job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after use.
 
-It is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance (in a map and reduce pattern for instance).
-See [below](#task-post-processing) for a better choice.
+`job_delete` is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance
+(in a map and reduce pattern for instance). See [below](#task-post-processing).
 
-`free ()` is the simplest possible choice for `job_delete`.
+`free ()` is a possible choice for `job_delete`, if `job` was allocated with `malloc ()` and affiliated functions.
 
 ###### Task post-processing
 
@@ -141,13 +141,7 @@ typedef struct {
 The `job->result` can then be retrieved inside the user defined function `job_delete` in a multi-thread-safe manner
 (allowing aggregation into a global output for instance), before any required deallocation of `job`.
 
----
-
-**NOTE:**
-
-`job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
-
----
+> `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
 
 ### 3. Cancel tasks
 
@@ -213,12 +207,11 @@ The monitoring data are passed to the handler function in a structure `threadpoo
   (a task is considered failed when `work`, the function passed to `threadpool_add_task`, does not return 0) ;
 - `size_t nb_canceled_tasks`: the number of canceled tasks.
 
-A handler `threadpool_monitor_to_terminal` is available for convenience.
-It monitors to `FILE_stream` of type `FILE *`, and `stderr` if `FILE_stream` is null.
+A handler `threadpool_monitor_to_terminal` is available for convenience:
 
-```c
-void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream)
-```
+- It can be passed as the second argument of `threadpool_set_monitor`.
+- It displays monitoring data as text sent to a stream of type `FILE *`, passed as the third argument of `threadpool_set_monitor`.
+  `stderr` will used by default if this third argument is `NULL`.
 
 ## Examples
 

@@ -51,7 +51,8 @@ struct threadpool
   int concluding;               // Indicates that 'threadpool_wait_and_destroy' has been called. Only workers can now add tasks (in 'thread_worker_starter').
   cnd_t proceed_or_conclude_or_runoff;  // Associated with 3 exclusive predicates.
   // Monitoring
-  struct {
+  struct
+  {
     void (*f) (struct threadpool_monitor, void *a);
     void *a;
   } monitor;
@@ -59,12 +60,16 @@ struct threadpool
   struct timespec t0;
 };
 
+static tss_t TSS_THREADPOOL;    // thread-specific storage of the threadpool in which a worker is running.
+static once_flag TSS_THREADPOOL_CREATED = ONCE_FLAG_INIT;
+
 // ================= Monitoring =================
 static int
 threadpool_monitor_exec (struct threadpool *monitoring, void *data)
 {
   if (((struct threadpool *) threadpool_global_data (monitoring))->monitor.f)
-    ((struct threadpool *) threadpool_global_data (monitoring))->monitor.f (*(struct threadpool_monitor *) data, ((struct threadpool *) threadpool_global_data (monitoring))->monitor.a);
+    ((struct threadpool *) threadpool_global_data (monitoring))->monitor.f (*(struct threadpool_monitor *) data,
+                                                                            ((struct threadpool *) threadpool_global_data (monitoring))->monitor.a);
   return 0;
 }
 
@@ -136,7 +141,14 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   fprintf (f, "%c", roll);      // Use gauge, rather than roll, to display a progress bar.
   fflush (f);
 }
+
 // ================= Worker crew =================
+static void
+tss_threadpool_create (void)
+{
+  thrd_honored (tss_create (&TSS_THREADPOOL, 0));       // No tss_delete will be called.
+}
+
 struct threadpool *
 threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data))
 {
@@ -169,6 +181,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   threadpool->monitor.a = 0;
   threadpool->monitoring = 0;
   timespec_get (&threadpool->t0, TIME_UTC);
+  call_once (&TSS_THREADPOOL_CREATED, tss_threadpool_create);
   return threadpool;
 
 on_error:
@@ -189,6 +202,7 @@ thread_worker_runner (void *args)
 {
   thrd_detach (thrd_current ());        // dispose of any resources allocated to the thread when it terminates.
   struct threadpool *threadpool = args;
+  thrd_honored (tss_set (TSS_THREADPOOL, threadpool));
   thrd_honored (mtx_lock (&threadpool->mutex));
   thrd_honored (tss_set (threadpool->worker_local_data.reference, threadpool->worker_local_data.make ? threadpool->worker_local_data.make (threadpool->global_data) : 0));      // Call to threadpool->worker_local_data.make is thread-safe.
   while (1)                     // Looping on tasks (concurrently with other workers)
@@ -236,10 +250,12 @@ thread_worker_runner (void *args)
       thrd_honored (cnd_broadcast (&threadpool->proceed_or_conclude_or_runoff));        // broadcast it to unblock and finish all pending threads.
     break;                      // Work is done or the predicate was not fulfilled due to timeout. Quit.
   }
-  void *localdata = threadpool_worker_local_data (threadpool);
+  void *localdata = threadpool_worker_local_data ();
   thrd_honored (tss_set (threadpool->worker_local_data.reference, 0));  // tss_set does not invoke the destructor associated with the key on the value being replaced.
   if (threadpool->worker_local_data.destroy)
-    threadpool->worker_local_data.destroy (localdata, threadpool->global_data); // The destructor of the thread-specific storage is called manually in a thread-safe manner.
+    // The destructor of the thread-specific storage is called manually in a thread-safe manner.
+    // and the global data is passed to the destructor (signature is different from tss_dtor_t (void (*)(void*))
+    threadpool->worker_local_data.destroy (localdata, threadpool->global_data);
   for (size_t i = 0; i < threadpool->max_nb_workers; i++)
     if (threadpool->running_worker_id[i] && thrd_equal (thrd_current (), *threadpool->running_worker_id[i]))
     {
@@ -307,7 +323,7 @@ threadpool_wait_and_destroy (struct threadpool *threadpool)
   while (!threadpool_runoff_predicate (threadpool))     // Wait for all tasks to be processed and all running workers to terminate properly.
     thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));
   thrd_honored (mtx_unlock (&threadpool->mutex));
-  tss_delete (threadpool->worker_local_data.reference);
+  tss_delete (threadpool->worker_local_data.reference); // Does not invoke any destructors.
   free (threadpool->worker_id);
   free (threadpool->running_worker_id);
   mtx_destroy (&threadpool->mutex);
@@ -318,8 +334,9 @@ threadpool_wait_and_destroy (struct threadpool *threadpool)
 }
 
 void *
-threadpool_worker_local_data (struct threadpool *threadpool)
+threadpool_worker_local_data (void)
 {
+  struct threadpool *threadpool = tss_get (TSS_THREADPOOL);
   return tss_get (threadpool->worker_local_data.reference);
 }
 

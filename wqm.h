@@ -23,7 +23,7 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers,
 // The submitted job is defined by 'job'.
 //   - 'job' will be passed to 'work' when processed by a worker.
 //   - 'job' will be destroyed by a call to 'job_delete' once the job has been processed by the worker.
-// 'threadpool' is passed to 'work' to give it access to 'threadpool_add_task', 'threadpool_global_data' and 'threadpool_worker_local_data' if needed.
+// 'threadpool' is passed to 'work' to give it access to 'threadpool_add_task' and 'threadpool_global_data' if needed.
 // Therefore, a worker can also create and submit tasks on his own.
 // Argument 'job_delete' is optional (see below).
 // Returns 0 on error, a unique id of the submitted task otherwise.
@@ -51,7 +51,7 @@ void *threadpool_global_data (struct threadpool *threadpool);
 // 'delete_local' is passed, as first argument, a value previously returned by 'make_local'.
 // Global data (as if returned by threadpool_global_data) is passed as an argument to 'make_local' and second argument to 'delete_local'.
 // 'make_local' and 'delete_local' can therefore access and update the content of 'global_data' safely if needed (to gather results or statistics for instance).
-void *threadpool_worker_local_data (struct threadpool *threadpool);
+void *threadpool_worker_local_data (void);
 
 // ** Options for 'threadpool_add_job' **
 // Call to 'job_delete' is MT-safe and, if not null, is done once per job (no less no more) right after the job has been completed by 'worker'.
@@ -73,4 +73,3 @@ void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_h
 // A monitor handler to FILE stream.
 void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream);
 #endif
-

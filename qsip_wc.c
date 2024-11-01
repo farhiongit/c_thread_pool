@@ -190,7 +190,7 @@ work (struct threadpool *threadpool, void *j)
   DPRINTF ("Job         (%1$p, %2$'zu) is being processed...\n", job->base, job->nmemb);
   if (job->nmemb >= 2)
   {
-    LocalData *l = threadpool_worker_local_data (threadpool);
+    LocalData *l = threadpool_worker_local_data ();
     GlobalData *g = threadpool_global_data (threadpool);
     void *p1, *p2;
     (void) hoare;               //p1 = p2 = hoare (job, g, l);
