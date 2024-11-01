@@ -113,24 +113,38 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 
 ###### Options
 
-- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task.
-  This function receives the job of the task as an argument.
-  It is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance (in a map and reduce pattern for instance).
+- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](cancel-tasks).)
+  This function receives the `job` of the task as an argument.
 
 `job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after use.
-`job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it would then not be executed multi-thread-safely, forbidding any aggregation.
+
+It is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance (in a map and reduce pattern for instance).
+See [below](#task-post-processing) for a better choice.
 
 `free ()` is the simplest possible choice for `job_delete`.
-But `job_delete` can also be used to do more than simply release jobs, to retrieve data used and possibly modified by the processed task in a multi-thread-safe manner.
-For instance, a job could be declared as a structure containing the `input` data of the task and its `result`.
+
+###### Task post-processing
+
+`job_delete` can also be used to do more than simply release data `job` after the task is done (or canceled):
+it can be used to retrieve data used and possibly modified by the processed task in a multi-thread-safe manner.
+
+For instance, a type `job_t` could be declared as a structure containing the `input` data of the task and its `result`
+and a pointer to `job_t` passed as the `job` argument of `threadpool_add_task`.
+
 ```c
 typedef struct {
   struct { ... } input;
   struct { ... } result;
-} job;
+} job_t;
 ```
 
-The `result` could then be retrieved by the user defined function `job_delete` in a multi-thread-safe manner and aggregated in a global result.
+The `job->result` can then be retrieved inside the user defined function `job_delete` in a multi-thread-safe manner
+(allowing aggregation into a global output for instance), before any required deallocation of `job`.
+
+---
+**NOTE:**
+`job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
+---
 
 ### 3. Cancel tasks
 
@@ -148,7 +162,7 @@ Previously submitted and still pending tasks can be canceled.
 
 Canceled tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called though.
 
-The function returns the number of canceled tasks, if any.
+The function returns the number of canceled tasks, if any, or 0 if there are not any left pending task to be canceled.
 
 ### 4. Wait for all submitted tasks to be completed
 
