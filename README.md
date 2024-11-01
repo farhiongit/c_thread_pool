@@ -143,6 +143,7 @@ The `job->result` can then be retrieved inside the user defined function `job_de
 
 ---
 **NOTE:**
+
 `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
 ---
 
