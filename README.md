@@ -128,18 +128,25 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 `job_delete` can also be used to do more than simply release data `job` after the task is done (or canceled):
 it can be used to retrieve data used and possibly modified by the processed task in a multi-thread-safe manner.
 
-For instance, a type `job_t` could be declared as a structure containing the `input` data of the task and its `result`
-and a pointer to `job_t` passed as the `job` argument of `threadpool_add_task`.
+For instance, a type `job_t` could be declared as a structure containing:
+
+- the `input` data of the task, initialized before `threadpool_add_task` is called and deallocated by `job_delete` ;
+- the `result` data of the task, initialized before `threadpool_add_task` is called, updated by `work` and deallocated by `job_delete` ;
+- the `aggregated` data of all tasks, initialized before `threadpool_add_task` is called with pointers to global data, and updated by `job_delete` ;
+
+and a pointer to `job_t` the be passed as the `job` argument of `threadpool_add_task`.
 
 ```c
 typedef struct {
   struct { ... } input;
   struct { ... } result;
+  struct { ... } aggregated;
 } job_t;
 ```
 
-The `job->result` can then be retrieved inside the user defined function `job_delete` in a multi-thread-safe manner
-(allowing aggregation into a global output for instance), before any required deallocation of `job`.
+The `job->result` can be retrieved inside the user-defined function `job_delete` (before any required deallocation of `job`)
+in a multi-thread-safe manner, allowing aggregation into `job->aggregated` (containing pointers to global data initialized before `threadpool_add_task` is called)
+for instance.
 
 > `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
 
@@ -195,17 +202,18 @@ It :
 
 The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
 
-- `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
+- `unsigned long uid`: a UID of the thread pool for which the monitoring handler is called ;
 - `float time`: the elapsed seconds since the creation of the thread pool ;
-- `size_t max_nb_workers`: the maximum number of workers, as defined at the creation of the thread pool ;
-- `size_t nb_processing_tasks`: the number of active workers, i.e. processing a task ;
-- `size_t nb_idle_workers`: the number of idle worker, i.e. waiting (some time) for a task to process ;
-- `size_t nb_pending_tasks`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
-- `size_t nb_succeeded_tasks`: the number of already processed and succeeded tasks by the thread pool
+- `size_t workers.max_nb`: the maximum number of workers, as defined at the creation of the thread pool ;
+- `size_t workers.nb_idle`: the number of idle worker, i.e. waiting (some time) for a task to process ;
+- `size_t tasks.nb_pending`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
+- `size_t tasks.nb_processing`: the number of active workers, i.e. processing a task ;
+- `size_t tasks.nb_succeeded`: the number of already processed and succeeded tasks by the thread pool
   (a task is considered successful when `work`, the function passed to `threadpool_add_task`, returns 0) ;
-- `size_t nb_failed_tasks`: the number of already processed and failed tasks by the thread pool
+- `size_t tasks.nb_failed`: the number of already processed and failed tasks by the thread pool
   (a task is considered failed when `work`, the function passed to `threadpool_add_task`, does not return 0) ;
-- `size_t nb_canceled_tasks`: the number of canceled tasks.
+- `size_t tasks.nb_canceled`: the number of canceled tasks ;
+- `size_t tasks.nb_submitted` : the number of submitted tasks (either pending, processing, succeeded, failed or canceled).
 
 A handler `threadpool_monitor_to_terminal` is available for convenience:
 
@@ -231,40 +239,44 @@ Running this example yields:
 ```
 $ make
 cc -O   -c -o wqm.o wqm.c
+ar rcs libwqm.a wqm.o
+libwqm.a:wqm.o:0000000000000010 R ALL_TASKS
+libwqm.a:wqm.o:0000000000000000 R LAST_TASK
+libwqm.a:wqm.o:0000000000000020 R NB_CPU
+libwqm.a:wqm.o:0000000000000008 R NEXT_TASK
+libwqm.a:wqm.o:0000000000000018 R SEQUENTIAL
+libwqm.a:wqm.o:00000000000003f6 T threadpool_add_task
+libwqm.a:wqm.o:0000000000000b92 T threadpool_cancel_task
+libwqm.a:wqm.o:0000000000000227 T threadpool_create_and_start
+libwqm.a:wqm.o:0000000000000b89 T threadpool_global_data
+libwqm.a:wqm.o:0000000000000088 T threadpool_monitor_to_terminal
+libwqm.a:wqm.o:00000000000006da T threadpool_set_monitor
+libwqm.a:wqm.o:0000000000000767 T threadpool_wait_and_destroy
+libwqm.a:wqm.o:0000000000000855 T threadpool_worker_local_data
 cc -O   -c -o qsip_wc.o qsip_wc.c
-cc -O    qsip_wc_test.c qsip_wc.o wqm.o   -o qsip_wc_test
-wqm.o:0000000000000010 R ALL_TASKS
-wqm.o:0000000000000000 R LAST_TASK
-wqm.o:0000000000000020 R NB_CPU
-wqm.o:0000000000000008 R NEXT_TASK
-wqm.o:0000000000000018 R SEQUENTIAL
-wqm.o:00000000000001f2 T threadpool_add_task
-wqm.o:0000000000000926 T threadpool_cancel_task
-wqm.o:000000000000004f T threadpool_create_and_start
-wqm.o:000000000000091d T threadpool_global_data
-wqm.o:00000000000004b5 T threadpool_set_monitor
-wqm.o:0000000000000542 T threadpool_wait_and_destroy
-wqm.o:000000000000062d T threadpool_worker_local_data
-qsip_wc.o:000000000000031a T qsip
+cc -O   -c -o qsip_wc_test.o qsip_wc_test.c
+cc -L.  qsip_wc_test.o qsip_wc.o  -lwqm -o qsip_wc_test
 ./qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times:
 Initializing 100,000,000 random numbers...
 7 workers requested and processing...
 (=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.
-[0x613036dea860][    0.0000s]
-[0x613036dea860][    0.0002s] .
-[0x613036dea860][    0.0003s] ..
-[0x613036dea860][    0.0003s] ...
-.
-.
-.
-[0x613036dea860][   20.2429s] ========================================================================**//////////////////////////---
-[0x613036dea860][   20.2509s] ========================================================================**//////////////////////////--
-[0x613036dea860][   20.2683s] =========================================================================*//////////////////////////---
-[0x613036dea860][   20.2862s] =========================================================================*//////////////////////////--
-[0x613036dea860][   20.2976s] ==========================================================================//////////////////////////--
-[0x613036dea860][   20.2976s] ==========================================================================//////////////////////////-
-[0x613036dea860][   20.2976s] ==========================================================================//////////////////////////
+[98178080106448 (7)][    0.0000s][   0] 
+[98178080106448 (7)][    0.0002s][   1] .
+Will go to sleep for 16 seconds...
+[98178080106448 (7)][    0.0002s][   2] ..
+[98178080106448 (7)][    0.0002s][   3] ...
+...
+[98178080106448 (7)][   11.5006s][  50] ==================================================-
+[98178080106448 (7)][   11.5545s][  50] ==================================================
+Stop sleeping after 16 seconds.
+[98178080106448 (7)][   16.0011s][  51] ==================================================.
+[98178080106448 (7)][   16.0013s][  52] ==================================================..
+...
+[98178080106448 (7)][   20.7538s][ 100] ================================================================================*///////////////////--
+[98178080106448 (7)][   20.8361s][ 100] ================================================================================*///////////////////-
+[98178080106448 (7)][   20.8542s][ 100] ================================================================================*///////////////////
+[98178080106448 (7)][   21.5008s][ 100] =================================================================================///////////////////
 Done.
 ```
 

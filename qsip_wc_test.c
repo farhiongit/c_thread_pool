@@ -113,9 +113,9 @@ main ()
   threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0);
   size_t i = 0;
   size_t task_id;
-  fprintf (stdout, _("Will go to sleep in %i seconds...\n"), TIMES / 6);
   for (; i < ((size_t) TIMES) / 2; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
+  fprintf (stdout, _("Will go to sleep for %i seconds...\n"), TIMES / 6);
   sleep (TIMES / 6);
   fprintf (stdout, _("Stop sleeping after %i seconds.\n"), TIMES / 6);
   for (; i < (size_t) TIMES; i++)

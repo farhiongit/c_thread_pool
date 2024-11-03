@@ -61,9 +61,16 @@ void *threadpool_worker_local_data (void);
 
 struct threadpool_monitor
 {
-  struct threadpool *threadpool;        // Monitored Thread pool.
+  unsigned long uid;            // Monitored Thread pool UID.
   double time;                  // Elapsed seconds since thread pool creation.
-  size_t max_nb_workers, nb_idle_workers, nb_pending_tasks, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_canceled_tasks;        // Monitoring data.
+  struct
+  {
+    size_t max_nb, nb_idle;
+  } workers;                    // Monitoring workers.
+  struct
+  {
+    size_t nb_submitted, nb_pending, nb_processing, nb_succeeded, nb_failed, nb_canceled;
+  } tasks;                      // Monitoring tasks.
 };
 typedef void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg);
 // Set monitor handler.

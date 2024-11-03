@@ -82,10 +82,11 @@ threadpool_monitor_call (struct threadpool *threadpool)
     if (p)
     {
       *p = (struct threadpool_monitor)
-      {.threadpool = threadpool,.max_nb_workers = threadpool->max_nb_workers,
-        .nb_processing_tasks = threadpool->nb_processing_tasks,.nb_idle_workers = threadpool->nb_idle_workers,
-        .nb_succeeded_tasks = threadpool->nb_succeeded_tasks,.nb_failed_tasks = threadpool->nb_failed_tasks,
-        .nb_pending_tasks = threadpool->nb_pending_tasks,.nb_canceled_tasks = threadpool->nb_canceled_tasks,
+      {.uid = (unsigned long) threadpool,.workers = {.max_nb = threadpool->max_nb_workers,.nb_idle = threadpool->nb_idle_workers,},
+      .tasks = {.nb_submitted = threadpool->nb_submitted_tasks,
+                .nb_processing = threadpool->nb_processing_tasks,
+                .nb_succeeded = threadpool->nb_succeeded_tasks,.nb_failed = threadpool->nb_failed_tasks,
+                .nb_pending = threadpool->nb_pending_tasks,.nb_canceled = threadpool->nb_canceled_tasks,},
       };
       struct timespec t;
       timespec_get (&t, TIME_UTC);
@@ -121,9 +122,8 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   {
     size_t upper;
     char c;
-  } datas[] = { {data.nb_succeeded_tasks, '='}, {data.nb_failed_tasks, 'X'}, {data.nb_processing_tasks, '*'},
-  {data.nb_pending_tasks, '.'}, {data.nb_canceled_tasks, '/'}, {data.nb_idle_workers, '-'},
-  {data.max_nb_workers, ' '}
+  } datas[] = { {data.tasks.nb_succeeded, '='}, {data.tasks.nb_failed, 'X'}, {data.tasks.nb_processing, '*'},
+  {data.tasks.nb_pending, '.'}, {data.tasks.nb_canceled, '/'}, {data.workers.nb_idle, '-'},
   };
   static FILE *f = 0;
   if (!f)
@@ -131,14 +131,11 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   static int legend = 0;
   if (!legend)
     legend = fprintf (f, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.\n");
-  static char gauge = '\r';
-  static char roll = '\n';
-  (void) (roll + gauge);
-  fprintf (f, "[%p][% 10.4fs] ", (void *) data.threadpool, data.time);
+  fprintf (f, "[%lu (%zu)][% 10.4fs][%4zu] ", data.uid, data.workers.max_nb, data.time, data.tasks.nb_submitted);
   for (size_t j = 0; j < sizeof (datas) / sizeof (*datas); j++)
     for (size_t i = 0; i < datas[j].upper; i++)
       fprintf (f, "%c", datas[j].c);
-  fprintf (f, "%c", roll);      // Use gauge, rather than roll, to display a progress bar.
+  fprintf (f, "\n");
   fflush (f);
 }
 
@@ -249,7 +246,7 @@ thread_worker_runner (void *args)
     else if (threadpool_is_done_predicate (threadpool)) // Second condition of the predicate is true: 
       thrd_honored (cnd_broadcast (&threadpool->proceed_or_conclude_or_runoff));        // broadcast it to unblock and finish all pending threads.
     break;                      // Work is done or the predicate was not fulfilled due to timeout. Quit.
-  }
+  }                             // while (1)
   void *localdata = threadpool_worker_local_data ();
   thrd_honored (tss_set (threadpool->worker_local_data.reference, 0));  // tss_set does not invoke the destructor associated with the key on the value being replaced.
   if (threadpool->worker_local_data.destroy)
