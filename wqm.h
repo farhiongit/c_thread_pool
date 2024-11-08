@@ -14,8 +14,7 @@
 extern const size_t NB_CPU;
 #  endif
 extern const size_t SEQUENTIAL;
-struct threadpool *threadpool_create_and_start (size_t nb_workers,
-                                                void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data));
+struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void), void (*delete_local) (void *local_data));
 
 // Call to 'threadpool_add_task' is MT-safe.
 // Tasks can be submitted to workers. They will be processed in parallel distributed over workers of the threadpool.
@@ -43,7 +42,7 @@ void threadpool_wait_and_destroy (struct threadpool *threadpool);
 
 // ** Options for 'threadpool_create_and_start' **
 // Global data pointed to by 'global_data' will be accessible to worker through a call to 'threadpool_global_data'.
-void *threadpool_global_data (struct threadpool *threadpool);
+void *threadpool_global_data (void);
 
 // Workers local data constructed by 'make_local' and destroyed by 'delete_local' will be (MT-safely) accessible to worker through a call to 'threadpool_worker_local_data'.
 // Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialization.
@@ -61,7 +60,7 @@ void *threadpool_worker_local_data (void);
 
 struct threadpool_monitor
 {
-  unsigned long uid;            // Monitored Thread pool UID.
+  struct threadpool *threadpool;        // The monitored Thread pool.
   double time;                  // Elapsed seconds since thread pool creation.
   struct
   {

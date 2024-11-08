@@ -49,25 +49,28 @@ struct gd
 };
 
 static void *
-tag (void *global)
+tag (void)
 {
+  void *global = threadpool_global_data ();
   return ((struct gd *) global)->tags++;
 }
 
 static void
-untag (void *local, void *global)
+untag (void *local)
 {
   (void) local;
+  void *global = threadpool_global_data ();
   ((struct gd *) global)->tags--;
 }
 
 static int
 worker (struct threadpool *threadpool, void *base)
 {
+  (void) threadpool;
   int ret = 0;
   (void) cmpi;                  // Avoid ‘cmpi’ defined but not used
 #if 1
-  struct gd *gd = threadpool_global_data (threadpool);
+  struct gd *gd = threadpool_global_data ();
 #  ifndef QSORT
   qsip (base, gd->size, gd->elem_size, lti, 0);
 #  else

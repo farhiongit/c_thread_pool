@@ -66,8 +66,8 @@ The API is defined in file `wqm.h`.
 ```c
 struct threadpool *threadpool_create_and_start (size_t nb_workers,
                                                 void *global_data,
-                                                void *(*make_local) (void *global_data),
-                                                void (*delete_local) (void *local_data, void *global_data))
+                                                void *(*make_local) (void),
+                                                void (*delete_local) (void *local_data))
 ```
 
 A thread pool is declared and started with a call to `threadpool_create_and_start ()`.
@@ -104,8 +104,9 @@ A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
 - The first argument `threadpool` is a thread pool returned by a previous call to `threadpool_create_and_start ()`.
 - The second argument `work` is a user defined function to be executed by a worker of the thread pool on `job`.
   This function `work` should return 0 on success, non 0 otherwise.
+  `work` should be made thread-safe as several `work` will be running in parallel (that's the whole point of the thread pool).
   This function receives the thread pool `threadpool` and the job `job` as arguments, as they were passed to `threadpool_add_task`.
-  Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task` or `threadpool_global_data` if needed.
+  Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task` if needed.
 - The third argument `job` is a pointer to the data to be used by the task and that will be processed by `work`.
   The data pointed to by `job` should not be deallocated before `threadpool_wait_and_destroy` is called.
 
@@ -150,7 +151,27 @@ for instance.
 
 > `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
 
-### 3. Cancel tasks
+### 3. Access to global and local thread data
+
+Global and local data of threads can be retrieved and updated safely in the context of working threads.
+
+The global data (`global_data` as passed to `threadpool_create_and_start`) of a thread pool can (only) be accessed inside user-defined functions
+`make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+
+```c
+void *threadpool_global_data (void)
+```
+
+The local data (created by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) of a thread
+can (only) be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+
+```c
+void *threadpool_worker_local_data (void)
+```
+
+These two functions must be called in the context of a running thread, otherwise they return 0.
+
+### 4. Cancel tasks
 
 ```c
 size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
@@ -168,7 +189,7 @@ Canceled tasks won't be processed, but `job_delete`, as optionally passed to `th
 
 The function returns the number of canceled tasks, if any, or 0 if there are not any left pending task to be canceled.
 
-### 4. Wait for all submitted tasks to be completed
+### 5. Wait for all submitted tasks to be completed
 
 ```c
 void threadpool_wait_and_destroy (struct threadpool *threadpool)
@@ -179,7 +200,7 @@ This function declares that all the tasks have been submitted.
 It then waits for all the tasks to be completed by workers.
 `threadpool` should not be used after a call to `threadpool_wait_and_destroy ()`.
 
-### 5. Monitor the thread pool activity
+### 6. Monitor the thread pool activity
 
 A monitoring of the thread pool activity can optionally be activated by calling
 ```c
@@ -261,22 +282,22 @@ Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times:
 Initializing 100,000,000 random numbers...
 7 workers requested and processing...
 (=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.
-[98178080106448 (7)][    0.0000s][   0] 
-[98178080106448 (7)][    0.0002s][   1] .
+[0x56d79ea0f780 (7)][    0.0000s][   0] 
+[0x56d79ea0f780 (7)][    0.0002s][   1] .
 Will go to sleep for 16 seconds...
-[98178080106448 (7)][    0.0002s][   2] ..
-[98178080106448 (7)][    0.0002s][   3] ...
+[0x56d79ea0f780 (7)][    0.0002s][   2] ..
+[0x56d79ea0f780 (7)][    0.0002s][   3] ...
 ...
-[98178080106448 (7)][   11.5006s][  50] ==================================================-
-[98178080106448 (7)][   11.5545s][  50] ==================================================
+[0x56d79ea0f780 (7)][   11.5006s][  50] ==================================================-
+[0x56d79ea0f780 (7)][   11.5545s][  50] ==================================================
 Stop sleeping after 16 seconds.
-[98178080106448 (7)][   16.0011s][  51] ==================================================.
-[98178080106448 (7)][   16.0013s][  52] ==================================================..
+[0x56d79ea0f780 (7)][   16.0011s][  51] ==================================================.
+[0x56d79ea0f780 (7)][   16.0013s][  52] ==================================================..
 ...
-[98178080106448 (7)][   20.7538s][ 100] ================================================================================*///////////////////--
-[98178080106448 (7)][   20.8361s][ 100] ================================================================================*///////////////////-
-[98178080106448 (7)][   20.8542s][ 100] ================================================================================*///////////////////
-[98178080106448 (7)][   21.5008s][ 100] =================================================================================///////////////////
+[0x56d79ea0f780 (7)][   20.7538s][ 100] ================================================================================*///////////////////--
+[0x56d79ea0f780 (7)][   20.8361s][ 100] ================================================================================*///////////////////-
+[0x56d79ea0f780 (7)][   20.8542s][ 100] ================================================================================*///////////////////
+[0x56d79ea0f780 (7)][   21.5008s][ 100] =================================================================================///////////////////
 Done.
 ```
 

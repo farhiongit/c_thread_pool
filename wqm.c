@@ -32,8 +32,8 @@ struct threadpool
   struct local_data             // Thread specific local data
   {
     tss_t reference;
-    void *(*make) (void *global_data);
-    void (*destroy) (void *local_data, void *global_data);
+    void *(*make) (void);
+    void (*destroy) (void *local_data);
   } worker_local_data;
   size_t nb_running_workers, nb_idle_workers, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_pending_tasks, nb_submitted_tasks, nb_canceled_tasks;
   thrd_t **running_worker_id /* [max_nb_workers] */ ;
@@ -67,9 +67,10 @@ static once_flag TSS_THREADPOOL_CREATED = ONCE_FLAG_INIT;
 static int
 threadpool_monitor_exec (struct threadpool *monitoring, void *data)
 {
-  if (((struct threadpool *) threadpool_global_data (monitoring))->monitor.f)
-    ((struct threadpool *) threadpool_global_data (monitoring))->monitor.f (*(struct threadpool_monitor *) data,
-                                                                            ((struct threadpool *) threadpool_global_data (monitoring))->monitor.a);
+  (void) monitoring;
+  struct threadpool *threadpool = threadpool_global_data ();
+  if (threadpool->monitor.f)
+    threadpool->monitor.f (*(struct threadpool_monitor *) data, threadpool->monitor.a);
   return 0;
 }
 
@@ -82,7 +83,7 @@ threadpool_monitor_call (struct threadpool *threadpool)
     if (p)
     {
       *p = (struct threadpool_monitor)
-      {.uid = (unsigned long) threadpool,.workers = {.max_nb = threadpool->max_nb_workers,.nb_idle = threadpool->nb_idle_workers,},
+      {.threadpool = threadpool,.workers = {.max_nb = threadpool->max_nb_workers,.nb_idle = threadpool->nb_idle_workers,},
       .tasks = {.nb_submitted = threadpool->nb_submitted_tasks,
                 .nb_processing = threadpool->nb_processing_tasks,
                 .nb_succeeded = threadpool->nb_succeeded_tasks,.nb_failed = threadpool->nb_failed_tasks,
@@ -131,7 +132,7 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   static int legend = 0;
   if (!legend)
     legend = fprintf (f, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.\n");
-  fprintf (f, "[%lu (%zu)][% 10.4fs][%4zu] ", data.uid, data.workers.max_nb, data.time, data.tasks.nb_submitted);
+  fprintf (f, "[%p (%zu)][% 10.4fs][%4zu] ", data.threadpool, data.workers.max_nb, data.time, data.tasks.nb_submitted);
   for (size_t j = 0; j < sizeof (datas) / sizeof (*datas); j++)
     for (size_t i = 0; i < datas[j].upper; i++)
       fprintf (f, "%c", datas[j].c);
@@ -147,7 +148,7 @@ tss_threadpool_create (void)
 }
 
 struct threadpool *
-threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void *global_data), void (*delete_local) (void *local_data, void *global_data))
+threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void), void (*delete_local) (void *local_data))
 {
   struct threadpool *threadpool = calloc (1, sizeof (*threadpool));     // All attributes are set to 0 (including pointers).
   if (!threadpool)
@@ -201,7 +202,7 @@ thread_worker_runner (void *args)
   struct threadpool *threadpool = args;
   thrd_honored (tss_set (TSS_THREADPOOL, threadpool));
   thrd_honored (mtx_lock (&threadpool->mutex));
-  thrd_honored (tss_set (threadpool->worker_local_data.reference, threadpool->worker_local_data.make ? threadpool->worker_local_data.make (threadpool->global_data) : 0));      // Call to threadpool->worker_local_data.make is thread-safe.
+  thrd_honored (tss_set (threadpool->worker_local_data.reference, threadpool->worker_local_data.make ? threadpool->worker_local_data.make () : 0));     // Call to threadpool->worker_local_data.make is thread-safe.
   while (1)                     // Looping on tasks (concurrently with other workers)
   {
     static const struct timespec timeout_delay = {.tv_sec = 0,.tv_nsec = 100 * 1000 * 1000 };   // Idle time (0.1 s)
@@ -250,9 +251,9 @@ thread_worker_runner (void *args)
   void *localdata = threadpool_worker_local_data ();
   thrd_honored (tss_set (threadpool->worker_local_data.reference, 0));  // tss_set does not invoke the destructor associated with the key on the value being replaced.
   if (threadpool->worker_local_data.destroy)
-    // The destructor of the thread-specific storage is called manually in a thread-safe manner.
-    // and the global data is passed to the destructor (signature is different from tss_dtor_t (void (*)(void*))
-    threadpool->worker_local_data.destroy (localdata, threadpool->global_data);
+    // The destructor of the thread-specific storage is called manually in a thread-safe manner
+    // and the before the thread is deallocated, allowing access to global data with threadpool_global_data.
+    threadpool->worker_local_data.destroy (localdata);
   for (size_t i = 0; i < threadpool->max_nb_workers; i++)
     if (threadpool->running_worker_id[i] && thrd_equal (thrd_current (), *threadpool->running_worker_id[i]))
     {
@@ -334,13 +335,20 @@ void *
 threadpool_worker_local_data (void)
 {
   struct threadpool *threadpool = tss_get (TSS_THREADPOOL);
-  return tss_get (threadpool->worker_local_data.reference);
+  if (threadpool)
+    return tss_get (threadpool->worker_local_data.reference);
+  else
+    return 0;
 }
 
 void *
-threadpool_global_data (struct threadpool *threadpool)
+threadpool_global_data (void)
 {
-  return threadpool->global_data;
+  struct threadpool *threadpool = tss_get (TSS_THREADPOOL);
+  if (threadpool)
+    return threadpool->global_data;
+  else
+    return 0;
 }
 
 size_t

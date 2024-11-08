@@ -66,9 +66,9 @@ typedef struct                  // Thread specific local data
 } LocalData;
 
 static void *
-local_data_create (void *vg)    // Called at worker initialization
+local_data_create (void)        // Called at worker initialization
 {
-  GlobalData *g = vg;
+  GlobalData *g = threadpool_global_data ();
   LocalData *l = malloc (sizeof (*l));
   EXEC_OR_ABORT (l);
   l->nb_swaps = l->nb_cmp = 0;
@@ -84,10 +84,10 @@ local_data_create (void *vg)    // Called at worker initialization
 }
 
 static void
-local_data_delete (void *vl, void *vg)  // Called at worker termination
+local_data_delete (void *vl)    // Called at worker termination
 {
   LocalData *l = vl;
-  GlobalData *g = vg;
+  GlobalData *g = threadpool_global_data ();
   atomic_fetch_add (&g->nb_swaps, l->nb_swaps);
   atomic_fetch_add (&g->nb_cmp, l->nb_cmp);
   free (l->temp);
@@ -191,7 +191,7 @@ work (struct threadpool *threadpool, void *j)
   if (job->nmemb >= 2)
   {
     LocalData *l = threadpool_worker_local_data ();
-    GlobalData *g = threadpool_global_data (threadpool);
+    GlobalData *g = threadpool_global_data ();
     void *p1, *p2;
     (void) hoare;               //p1 = p2 = hoare (job, g, l);
     lomuto (job, g, l, &p1, &p2);
