@@ -1,6 +1,7 @@
 // Multi-threaded work queue manager
 // (c) L. Farhi, 2024
 // Language: C (C11)
+#include <stdio.h>
 #include <stdlib.h>
 #include <threads.h>
 #include <sys/sysinfo.h>        // for get_nprocs
@@ -99,7 +100,7 @@ threadpool_monitor_call (struct threadpool *threadpool)
       t.tv_sec -= threadpool->t0.tv_sec;
       t.tv_nsec -= threadpool->t0.tv_nsec;
       p->time = (double) t.tv_sec + (double) t.tv_nsec / 1e9;
-      threadpool_add_task (threadpool->monitoring, threadpool_monitor_exec, p, free);
+      threadpool_add_task (threadpool->monitoring, threadpool_monitor_exec, p, free);   // p will be free'd at task termination (see line 243) by a call to free.
     }
   }
 }

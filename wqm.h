@@ -3,8 +3,10 @@
 // Language: C
 #ifndef __THREADPOOL_H__
 #  define __THREADPOOL_H__
-#  include <stddef.h>
-#  include <stdio.h>
+#  include <stddef.h>           // for size_t
+#  include <stdio.h>            // for __GLIBC__
+
+struct threadpool;              // Abstract data type : opaque record of a thread pool
 
 // 'threadpool_create_and_start' creates a threadpool of 'nb_workers' workers.
 // If 'nb_workers' is 0 or 'NB_CPU', the number of workers is set equal to the number of available CPUs.
@@ -60,7 +62,7 @@ void *threadpool_worker_local_data (void);
 
 struct threadpool_monitor
 {
-  struct threadpool *threadpool;        // The monitored Thread pool.
+  const struct threadpool *threadpool;  // The monitored Thread pool.
   double time;                  // Elapsed seconds since thread pool creation.
   struct
   {

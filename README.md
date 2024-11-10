@@ -223,7 +223,7 @@ It :
 
 The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
 
-- `unsigned long uid`: a UID of the thread pool for which the monitoring handler is called ;
+- `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
 - `float time`: the elapsed seconds since the creation of the thread pool ;
 - `size_t workers.max_nb`: the maximum number of workers, as defined at the creation of the thread pool ;
 - `size_t workers.nb_idle`: the number of idle worker, i.e. waiting (some time) for a task to process ;
