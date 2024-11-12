@@ -39,7 +39,7 @@ typedef struct
   size_t nmemb;
 } Job;                          // Chunk of an array of elements.
 
-static void *
+static Job *
 job_create (Job j)
 {
   Job *pj = malloc (sizeof (*pj));

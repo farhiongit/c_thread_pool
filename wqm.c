@@ -128,8 +128,8 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   {data.tasks.nb_pending, '.'}, {data.tasks.nb_canceled, '/'}, {data.workers.nb_idle, '-'},
   };
   static FILE *f = 0;
-  if (!f)
-    f = FILE_stream ? FILE_stream : stderr;
+  if (!f && !(f = FILE_stream))
+    f = stderr;
   static int legend = 0;
   if (!legend)
     legend = fprintf (f, "(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.\n");

@@ -108,7 +108,8 @@ A task is submitted to the thread pool with a call to `threadpool_add_task ()`.
   This function receives the thread pool `threadpool` and the job `job` as arguments, as they were passed to `threadpool_add_task`.
   Therefore, `work` can itself (multi-thread-safely) call `threadpool_add_task` if needed.
 - The third argument `job` is a pointer to the data to be used by the task and that will be processed by `work`.
-  The data pointed to by `job` should not be deallocated before `threadpool_wait_and_destroy` is called.
+  It should be fully initialized before it is passed to `threadpool_add_task`.
+  It can be allocated automatically, statically or dynamically, as long it survives until the job is done by `work`.
 
 The function `threadpool_add_task` returns a unique id of the submitted task, or 0 on error (with `errno` set to `ENOMEM`).
 
@@ -117,12 +118,14 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 - The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#3-cancel-tasks).)
   This function receives the `job` of the task as an argument.
 
-`job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after use.
+`job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after `work` is done.
 
 `job_delete` is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance
 (in a map and reduce pattern for instance). See [below](#task-post-processing).
 
-`free ()` is a possible choice for `job_delete`, if `job` was allocated with `malloc ()` and affiliated functions.
+> `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
+
+If `job` was allocated with `malloc ()` and affiliated functions, `free ()` is a possible choice for `job_delete`.
 
 ###### Task post-processing
 
@@ -131,45 +134,39 @@ it can be used to retrieve data used and possibly modified by the processed task
 
 For instance, a type `job_t` could be declared as a structure containing:
 
-- the `input` data of the task, initialized before `threadpool_add_task` is called and deallocated by `job_delete` ;
-- the `result` data of the task, initialized before `threadpool_add_task` is called, updated by `work` and deallocated by `job_delete` ;
-- the `aggregated` data of all tasks, initialized before `threadpool_add_task` is called with pointers to global data, and updated by `job_delete` ;
-
-and a pointer to `job_t` the be passed as the `job` argument of `threadpool_add_task`.
-
 ```c
 typedef struct {
   struct { ... } input;
   struct { ... } result;
-  struct { ... } aggregated;
 } job_t;
 ```
 
-The `job->result` can be retrieved inside the user-defined function `job_delete` (before any required deallocation of `job`)
-in a multi-thread-safe manner, allowing aggregation into `job->aggregated` (containing pointers to global data initialized before `threadpool_add_task` is called)
-for instance.
+- the `result` data of the task is computed from `input` by `work` ;
+- an aggregated result of all the tasks can then be multi-thread-safely updated from `result` by `job_delete` (before any required deallocation of `job`).
 
-> `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
+`global_data`, passed to `threadpool_create_and_start` and retrievable by `threadpool_global_data`, is a possible choice to hold the aggregated result.
 
 ### 3. Access to global and local thread data
 
 Global and local data of threads can be retrieved and updated safely in the context of working threads.
 
-The global data (`global_data` as passed to `threadpool_create_and_start`) of a thread pool can (only) be accessed inside user-defined functions
-`make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+The global data of a thread pool (`global_data` as passed to `threadpool_create_and_start`):
+
+- should be fully initialized before `threadpool_create_and_start` is called ;
+- should survive after `threadpool_wait_and_destroy` is called ;
+- can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
 
 ```c
 void *threadpool_global_data (void)
 ```
 
-The local data (created by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) of a thread
-can (only) be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+The local data of a thread (created by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
 
 ```c
 void *threadpool_worker_local_data (void)
 ```
 
-These two functions must be called in the context of a running thread, otherwise they return 0.
+> These two functions must be called in the context of a running thread, otherwise they return 0.
 
 ### 4. Cancel tasks
 

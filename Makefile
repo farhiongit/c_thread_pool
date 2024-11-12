@@ -1,4 +1,5 @@
-CFLAGS+=-O -fPIC
+CFLAGS+=-O
+CFLAGS+=-fPIC
 
 run: libwqm.a libwqm.so qsip_wc_test
 	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:. ./qsip_wc_test
@@ -19,7 +20,7 @@ wqm.o: wqm.c wqm.h
 
 lib%.so: LDFLAGS+=-shared
 lib%.so: %.o
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^
 
 lib%.a: ARFLAGS=rcs
 lib%.a: %.o
