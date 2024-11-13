@@ -20,6 +20,34 @@ The user:
 |- | - |
 | `wqm.h` | `wqm.c` |
 
+### Libraries
+
+Create a static and dynamic library using :
+
+```
+$ make libs
+cc -O -fPIC   -c -o wqm.o wqm.c
+ar rcs libwqm.a wqm.o
+libwqm.a:wqm.o:0000000000000010 R ALL_TASKS
+libwqm.a:wqm.o:0000000000000000 R LAST_TASK
+libwqm.a:wqm.o:0000000000000020 R NB_CPU
+libwqm.a:wqm.o:0000000000000008 R NEXT_TASK
+libwqm.a:wqm.o:0000000000000018 R SEQUENTIAL
+libwqm.a:wqm.o:00000000000003a4 T threadpool_add_task
+libwqm.a:wqm.o:0000000000000bb6 T threadpool_cancel_task
+libwqm.a:wqm.o:00000000000001d5 T threadpool_create_and_start
+libwqm.a:wqm.o:0000000000000b34 T threadpool_global_data
+libwqm.a:wqm.o:0000000000000027 T threadpool_monitor_to_terminal
+libwqm.a:wqm.o:0000000000000688 T threadpool_set_monitor
+libwqm.a:wqm.o:0000000000000715 T threadpool_wait_and_destroy
+libwqm.a:wqm.o:0000000000000803 T threadpool_worker_local_data
+cc -shared -o libwqm.so wqm.o
+```
+
+| Static library | Dynamic library |
+|- | - |
+| `libwqm.a` | `libwqm.so` |
+
 ### Interface
 
 #### Basic functionalities
@@ -241,39 +269,25 @@ A handler `threadpool_monitor_to_terminal` is available for convenience:
 
 ## Examples
 
+Type `make` to compile and run the examples.
+
+### Quick sort in place
+
 An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_wc_test.c`.
+
+Two encapsulated thread pools are used : one to distribute 100 tasks over 7 monitored threads, each task sorting 1000000 numbers distributed over the CPU threads.
 
 - `qsip_wc.c` is an attempt to implement a parallelized version of the quick sort algorithm (using a thread pool);
 
     - It uses features such as global data, worker local data, dynamic creation and deletion of jobs.
-    - It reveals that parallelizing quick sort is inefficient due to thread management overhead.
+    - It reveals that a parallelized quick sort is inefficient due to thread management overhead.
 
 - `qsip_wc_test.c` is an example of a thread pool that sorts several arrays using the above parallelized version of the quick sort algorithm.
 
     - It uses features such as global data, worker local data, task cancellation and monitoring.
 
-Type `make` to compile and run the example.
 Running this example yields:
 ```
-$ make
-cc -O   -c -o wqm.o wqm.c
-ar rcs libwqm.a wqm.o
-libwqm.a:wqm.o:0000000000000010 R ALL_TASKS
-libwqm.a:wqm.o:0000000000000000 R LAST_TASK
-libwqm.a:wqm.o:0000000000000020 R NB_CPU
-libwqm.a:wqm.o:0000000000000008 R NEXT_TASK
-libwqm.a:wqm.o:0000000000000018 R SEQUENTIAL
-libwqm.a:wqm.o:00000000000003f6 T threadpool_add_task
-libwqm.a:wqm.o:0000000000000b92 T threadpool_cancel_task
-libwqm.a:wqm.o:0000000000000227 T threadpool_create_and_start
-libwqm.a:wqm.o:0000000000000b89 T threadpool_global_data
-libwqm.a:wqm.o:0000000000000088 T threadpool_monitor_to_terminal
-libwqm.a:wqm.o:00000000000006da T threadpool_set_monitor
-libwqm.a:wqm.o:0000000000000767 T threadpool_wait_and_destroy
-libwqm.a:wqm.o:0000000000000855 T threadpool_worker_local_data
-cc -O   -c -o qsip_wc.o qsip_wc.c
-cc -O   -c -o qsip_wc_test.o qsip_wc_test.c
-cc -L.  qsip_wc_test.o qsip_wc.o  -lwqm -o qsip_wc_test
 ./qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times:
 Initializing 100,000,000 random numbers...
@@ -298,7 +312,14 @@ Stop sleeping after 16 seconds.
 Done.
 ```
 
-## Implementation
+### Fuzzy words
+
+This example matches a list of french fuzzy words against the french dictionary.
+
+Two encapsulated thread pools are used : one to distribute the list of words on one monitored single thread (words are processed sequentially),
+each word being compared to the entries (distributed over the CPU threads) of the dictionary.
+
+## Implementation insights
 
 The API is implemented in C11 (file `wqm.c`) using the standard C thread library <threads.h>.
 It is highly inspired from the great book "Programming with POSIX Threads" written by David R. Butenhof, 21st ed., 2008, Addison Wesley.
