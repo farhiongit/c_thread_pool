@@ -2,7 +2,7 @@
 
 > This API implements a task parallelization mechanism based on the thread pool pattern.
 
-![alt text](ocean-pool-Giola-Lagoon.jpg "A beautiful, fully featured sea pool")
+![Image of the Giola Lagoon in Thassos](ocean-pool-Giola-Lagoon.jpg "A beautiful, fully featured sea pool")
 
 ## Usage
 
@@ -11,7 +11,7 @@ The thread pool pattern allows to run parallel tasks easily without the burden o
 The user:
 
 1. declares a thread pool and chooses the maximum number of parallel workers in charge of the execution of tasks (`threadpool_create_and_start ()`) ;
-2. submits tasks to the thread pool that will pass it to one of available workers (`threadpool_add_task ()`) and will be executed asynchronously;
+2. submits tasks to the thread pool (`threadpool_add_task ()`) that will be passed to one of available workers and will be executed asynchronously ;
 3. waits for all the tasks to be completed (`threadpool_wait_and_destroy ()`).
 
 ### Files
@@ -146,33 +146,42 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 - The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#3-cancel-tasks).)
   This function receives the `job` of the task as an argument.
 
-`job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after `work` is done.
+`job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after `work` is done and avoid memory leaks.
 
 `job_delete` is called in a multi-thread-safe manner and can therefore safely aggregate results to those of previous tasks for instance
-(in a map and reduce pattern for instance). See [below](#task-post-processing).
+(in a map and reduce pattern for instance). See [below](#multi-thread-safe-task-post-processing).
 
 > `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
 
-If `job` was allocated with `malloc ()` and affiliated functions, `free ()` is a possible choice for `job_delete`.
+If `job` was allocated with a single `malloc ()` and affiliated functions, `free ()` is a possible choice for `job_delete`.
 
-###### Task post-processing
+###### Multi-thread safe task post-processing
 
-`job_delete` can also be used to do more than simply release data `job` after the task is done (or canceled):
-it can be used to retrieve data used and possibly modified by the processed task in a multi-thread-safe manner.
+Besides simply releasing data `job`, the user-defined `job_delete` can also be used as a callback function, called after the task is done or canceled, to retrieve the used and possibly modified `job` and take actions (displaying, computing, aggregating, ...).
 
-For instance, a type `job_t` could be declared as a structure containing:
+For instance, a user-defined type `job_t` could be declared as a structure containing:
 
 ```c
 typedef struct {
   struct { ... } input;
   struct { ... } result;
+  int done;
 } job_t;
 ```
+A `job` of type `job_t` would then be passed to `threadpool_add_task`.
 
-- the `result` data of the task is computed from `input` by `work` ;
-- an aggregated result of all the tasks can then be multi-thread-safely updated from `result` by `job_delete` (before any required deallocation of `job`).
+1. Before `job` is passed to `threadpool_add_task`:
+  - `input` data is set ;
+  - `done` is set to 0 ;
+1. In the user-defined function `work`:
+  - the previously set `input` data is used to compute the `result` data of the task ;
+  - `done` is set to 1 (and therefore remains to 0 if the task was canceled by `threadpool_cancel_task`) ;
+1. In the user-defined function `job_delete`:
+  - if `done` is set to 1, an aggregated result of all the tasks can then be multi-thread-safely updated from `result` ;
+    `global_data`, passed to `threadpool_create_and_start` and retrievable by `threadpool_global_data`, is a possible choice to hold the aggregated result.
+  - any required deallocation of `job` is done.
 
-`global_data`, passed to `threadpool_create_and_start` and retrievable by `threadpool_global_data`, is a possible choice to hold the aggregated result.
+See below for the example [fuzzy words](#fuzzy-words) of such a pattern.
 
 ### 3. Access to global and local thread data
 
@@ -221,8 +230,10 @@ void threadpool_wait_and_destroy (struct threadpool *threadpool)
 ```
 
 The single argument `threadpool` is a thread pool returned by a previous call to `threadpool_create_and_start ()`.
+
 This function declares that all the tasks have been submitted.
 It then waits for all the tasks to be completed by workers.
+
 `threadpool` should not be used after a call to `threadpool_wait_and_destroy ()`.
 
 ### 6. Monitor the thread pool activity
@@ -269,11 +280,11 @@ A handler `threadpool_monitor_to_terminal` is available for convenience:
 
 ## Examples
 
-Type `make` to compile and run the examples.
+Type `make` to compile and run the examples (in sub-folder [examples](examples)).
 
 ### Quick sort in place
 
-An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_wc_test.c`.
+An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_wc_test.c` [here](examples/qsip).
 
 Two encapsulated thread pools are used : one to distribute 100 tasks over 7 monitored threads, each task sorting 1000000 numbers distributed over the CPU threads.
 
@@ -314,10 +325,12 @@ Done.
 
 ### Fuzzy words
 
-This example matches a list of french fuzzy words against the french dictionary.
+This [example](examples/fuzzyword) matches a list of french fuzzy words against the french dictionary.
 
 Two encapsulated thread pools are used : one to distribute the list of words on one monitored single thread (words are processed sequentially),
 each word being compared to the entries (distributed over the CPU threads) of the dictionary.
+
+It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe task-post-processing).
 
 ## Implementation insights
 
