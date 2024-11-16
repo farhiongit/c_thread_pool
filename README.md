@@ -143,7 +143,7 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 
 ###### Options
 
-- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#3-cancel-tasks).)
+- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#4-cancel-tasks).)
   This function receives the `job` of the task as an argument.
 
 `job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after `work` is done and avoid memory leaks.
@@ -330,7 +330,7 @@ This [example](examples/fuzzyword) matches a list of french fuzzy words against 
 Two encapsulated thread pools are used : one to distribute the list of words on one monitored single thread (words are processed sequentially),
 each word being compared to the entries (distributed over the CPU threads) of the dictionary.
 
-It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe task-post-processing).
+It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe-task-post-processing).
 
 ## Implementation insights
 
