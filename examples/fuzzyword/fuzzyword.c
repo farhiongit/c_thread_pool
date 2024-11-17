@@ -10,6 +10,7 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define _(s) (s)
 
+// ----- Thread pool 2
 struct tp2_local
 {
   size_t length;
@@ -19,7 +20,7 @@ struct tp2_local
 static void *
 tp2_make_local ()
 {
-  return calloc (1, sizeof (struct tp2_local));
+  return calloc (1, sizeof (struct tp2_local)); // 0-length array.
 }
 
 static void
@@ -27,6 +28,40 @@ tp2_delete_local (void *local_data)
 {
   free (((struct tp2_local *) local_data)->array);
   free (local_data);
+}
+
+struct tp2_global
+{
+  const wchar_t *match;
+  unsigned long int dmatch;
+};
+
+struct tp2_job
+{
+  struct
+  {
+    const wchar_t *word;
+    const wchar_t *realword;
+    const wchar_t *fuzzyword;
+  } input;
+  struct
+  {
+    unsigned long int d;
+    const wchar_t *match;
+  } result;
+};
+
+static void
+tp2_job_free (void *arg)
+{
+  struct tp2_global *tp2_global = threadpool_global_data ();
+  struct tp2_job *tp2_job = arg;
+  if (tp2_job->result.d <= tp2_global->dmatch)
+  {
+    tp2_global->match = tp2_job->result.match;
+    tp2_global->dmatch = tp2_job->result.d;
+  }
+  free (arg);
 }
 
 // https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance
@@ -60,40 +95,6 @@ dld (size_t lwa, const wchar_t *wa, size_t lwb, const wchar_t *wb, int transpose
   return dld;
 }
 
-struct tp2_job
-{
-  struct
-  {
-    const wchar_t *word;
-    const wchar_t *realword;
-    const wchar_t *fuzzyword;
-  } input;
-  struct
-  {
-    unsigned long int d;
-    const wchar_t *match;
-  } result;
-};
-
-struct tp2_global
-{
-  const wchar_t *match;
-  unsigned long int dmatch;
-};
-
-static void
-tp2_job_free (void *arg)
-{
-  struct tp2_global *tp2_global = threadpool_global_data ();
-  struct tp2_job *tp2_job = arg;
-  if (tp2_job->result.d <= tp2_global->dmatch)
-  {
-    tp2_global->match = tp2_job->result.match;
-    tp2_global->dmatch = tp2_job->result.d;
-  }
-  free (arg);
-}
-
 static int
 tp2_worker (struct threadpool *threadpool, void *arg)
 {
@@ -102,6 +103,93 @@ tp2_worker (struct threadpool *threadpool, void *arg)
   tp2->result.d = dld (wcslen (tp2->input.word), tp2->input.word, wcslen (tp2->input.fuzzyword), tp2->input.fuzzyword, 1);
   tp2->result.match = tp2->input.realword;
   return 0;
+}
+
+// ----- Thread pool 1
+struct tp1_global
+{
+  const char *listofwords;
+};
+
+struct tp1_resource
+{
+  size_t nb_lines;
+  wchar_t (*lines)[100];        // Pointer to type const wchar_t[100]
+  wchar_t **colllines;
+};
+
+static void *
+tp1_res_alloc (void *global_data)
+{
+  static struct tp1_resource res;
+
+  res.lines = 0;
+#ifdef COLLATE
+  fprintf (stderr, _("Collating with locale %s\n"), setlocale (LC_COLLATE, 0));
+  res.colllines = 0;
+#endif
+  const char *listofwords = ((struct tp1_global *) global_data)->listofwords;
+  fprintf (stderr, _("Reading the french dictionnary of words %s...\n"), listofwords);
+  res.nb_lines = 0;
+  FILE *f = fopen (listofwords, "r,ccs=UTF-8"); // File is encoded in UTF-8.
+  for (wchar_t line[100]; fgetws (line, 100, f);)       // Reads a string of at most n-1 wide characters, and adds a terminating null wide character
+    res.nb_lines++;
+  res.lines = malloc (res.nb_lines * sizeof (*res.lines));
+#ifdef COLLATE
+  res.colllines = malloc (res.nb_lines * sizeof (*res.colllines));
+#endif
+  f = freopen (0, "r,ccs=UTF-8", f);    // File is encoded in UTF-8.
+  res.nb_lines = 0;
+  for (wchar_t line[100]; fgetws (line, 100, f);)       // Reads a string of at most n-1 wide characters, and adds a terminating null wide character
+  {
+    if (wcslen (line) && line[wcslen (line) - 1] == L'\n')
+      line[wcslen (line) - 1] = L'\0';
+    res.nb_lines++;
+    wcsncpy (res.lines[res.nb_lines - 1], line, wcslen (line) + 1);     // Copies at most n wide characters, including the terminating null wide character.
+#ifdef COLLATE
+    size_t lcollline = wcsxfrm (0, line, 0);    // Returns the number of bytes required to store the transformed string, excluding the terminating null byte.
+    wchar_t *collline = calloc ((lcollline + 1), sizeof (*collline));
+    wcsxfrm (collline, line, lcollline);        // Transforms at most n bytes.
+    res.colllines[res.nb_lines - 1] = collline; // Copies at most n wide characters, including the terminating null wide character.
+#endif
+  }
+  fclose (f);
+
+  return &res;
+}
+
+static void
+tp1_res_dealloc (void *p)
+{
+  struct tp1_resource *res = p;
+  free (res->lines);
+#ifdef COLLATE
+  for (size_t i = 0; i < res->nb_lines; i++)
+    free (res->colllines[i]);
+  free (res->colllines);
+#endif
+}
+
+struct tp1_job
+{
+  struct
+  {
+    wchar_t *wa;                // fuzzy word
+  } input;
+  struct
+  {
+    const wchar_t *match_ref;   // Best match
+  } result;
+};
+
+static void
+tp1_job_free (void *arg)
+{
+  struct tp1_job *ta = arg;
+  fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);
+
+  free (ta->input.wa);
+  free (ta);
 }
 
 #undef COLLATE
@@ -151,78 +239,24 @@ get_match (wchar_t *wa, size_t nb_lines, const wchar_t (*const lines)[100], wcha
   return tp2_global.match;
 }
 
-struct tp1
-{
-  struct
-  {
-    wchar_t *wa;
-    size_t nb_lines;
-    const wchar_t (*lines)[100];
-    wchar_t *const *colllines;
-  } input;
-  struct
-  {
-    const wchar_t *match_ref;
-  } result;
-};
-
-static void
-tp1_job_free (void *arg)
-{
-  struct tp1 *ta = arg;
-  fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);
-
-  free (ta->input.wa);
-  free (ta);
-}
-
 static int
 tp1_worker (struct threadpool *threadpool, void *arg)
 {
   (void) threadpool;
-  struct tp1 *ta = arg;
-  ta->result.match_ref = get_match (ta->input.wa, ta->input.nb_lines, ta->input.lines, ta->input.colllines);
+  struct tp1_job *ta = arg;
+  struct tp1_resource *tp1_resource = threadpool_global_resource ();
+  ta->result.match_ref = get_match (ta->input.wa, tp1_resource->nb_lines, tp1_resource->lines, tp1_resource->colllines);
   return 0;
 }
 
 int
 main (int argc, char *argv[])
 {
-  static const char listofwords[] = "liste.de.mots.francais.frgut.txt";
   setlocale (LC_ALL, "fr_FR.UTF-8");    // File listofwords is a list of french words.
 
-  wchar_t (*lines)[100] = 0;    // Pointer to type wchar_t[100]
-#ifdef COLLATE
-  fprintf (stderr, _("Collating with locale %s\n"), setlocale (LC_COLLATE, 0));
-  wchar_t **colllines = 0;
-#endif
-  fprintf (stderr, _("Reading the french dictionnary of words %s...\n"), listofwords);
-  size_t nb_lines = 0;
-  FILE *f = fopen (listofwords, "r,ccs=UTF-8"); // File is encoded in UTF-8.
-  for (wchar_t line[100]; fgetws (line, 100, f);)       // Reads a string of at most n-1 wide characters, and adds a terminating null wide character
-    nb_lines++;
-  lines = malloc (nb_lines * sizeof (*lines));
-#ifdef COLLATE
-  colllines = malloc (nb_lines * sizeof (*colllines));
-#endif
-  f = freopen (0, "r,ccs=UTF-8", f);    // File is encoded in UTF-8.
-  nb_lines = 0;
-  for (wchar_t line[100]; fgetws (line, 100, f);)       // Reads a string of at most n-1 wide characters, and adds a terminating null wide character
-  {
-    if (wcslen (line) && line[wcslen (line) - 1] == L'\n')
-      line[wcslen (line) - 1] = L'\0';
-    nb_lines++;
-    wcsncpy (lines[nb_lines - 1], line, wcslen (line) + 1);     // Copies at most n wide characters, including the terminating null wide character.
-#ifdef COLLATE
-    size_t lcollline = wcsxfrm (0, line, 0);    // Returns the number of bytes required to store the transformed string, excluding the terminating null byte.
-    wchar_t *collline = calloc ((lcollline + 1), sizeof (*collline));
-    wcsxfrm (collline, line, lcollline);        // Transforms at most n bytes.
-    colllines[nb_lines - 1] = collline; // Copies at most n wide characters, including the terminating null wide character.
-#endif
-  }
-  fclose (f);
-
-  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, 0, 0, 0);
+  struct tp1_global tp1_global = { "liste.de.mots.francais.frgut.txt" };
+  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global, 0, 0);
+  threadpool_set_resource_manager (tp1, tp1_res_alloc, tp1_res_dealloc);
   threadpool_set_monitor (tp1, threadpool_monitor_to_terminal, stderr);
   fprintf (stderr, "Searching for matching words...\n");
   for (int iarg = 1; iarg < argc; iarg++)
@@ -238,21 +272,15 @@ main (int argc, char *argv[])
     for (size_t i = 0; i < wcslen (wa) && i < lwa; i++)
       wa[i] = (wchar_t) towlower ((wint_t) wa[i]);
 
-    struct tp1 *job = malloc (sizeof (*job));
-    *job = (struct tp1)
+    struct tp1_job *job = malloc (sizeof (*job));
+    *job = (struct tp1_job)
     {
-      {wa, nb_lines, lines, colllines},
+      {wa},
       {0}
     };
     threadpool_add_task (tp1, tp1_worker, job, tp1_job_free);
   }                             // for (int iarg = 1; iarg < argc; iarg++)
   threadpool_wait_and_destroy (tp1);
 
-  free (lines);
-#ifdef COLLATE
-  for (size_t i = 0; i < nb_lines; i++)
-    free (colllines[i]);
-  free (colllines);
-#endif
   fprintf (stderr, "Done.\n");
 }

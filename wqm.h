@@ -60,13 +60,24 @@ void *threadpool_worker_local_data (void);
 // 'job_delete' is useful if the 'job' passed to 'threadpool_add_job' has been allocated dynamically and needs to be free'd after use.
 // This could alternatively (and less conveniently) be done manually at the end for 'worker'.
 
+// Modify the idle timeout delay (in seconds, default is 0.1 s).
+void threadpool_set_idle_timeout (struct threadpool *threadpool, double delay);
+
+// Manage global resources for all tasks.
+// allocator will be called before the first tasks is processed, deallocator after the last tasks has been processed.
+// Resources will be deallocated and reallocated after idle timeout.
+void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource));
+
+// Global data pointed to by 'global_data' will be accessible to worker through a call to 'threadpool_global_data'.
+void *threadpool_global_resource (void);
+
 struct threadpool_monitor
 {
   const struct threadpool *threadpool;  // The monitored Thread pool.
   double time;                  // Elapsed seconds since thread pool creation.
   struct
   {
-    size_t max_nb, nb_idle;
+    size_t nb_max, nb_idle;
   } workers;                    // Monitoring workers.
   struct
   {

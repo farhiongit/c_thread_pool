@@ -61,12 +61,14 @@ cc -shared -o libwqm.so wqm.o
 
 Those features are detailed below.
 
-#### Advanced functionalities
+#### Optional advanced functionalities
 
 | Function | Description |
 | - | - |
 | `threadpool_global_data` | Access the user defined shared global data of the pool of workers |
 | `threadpool_worker_local_data` | Access the user defined local data of a worker |
+| `threadpool_set_idle_timeout` | Modify the idle time out (default is 0.1 s) |
+| `threadpool_set_resource_manager` | Define the resource manager functions |
 | `threadpool_set_monitor` | Set a user-defined function to retrieve and display monitoring information |
 
 Those features are detailed below.
@@ -79,6 +81,7 @@ This implementation of a thread pool brings unique features, not found anywhere 
 1. The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user defined function `job_delete ()`), allowing collecting data at task termination.
 1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
 1. Local data can be defined and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. Global resources can be allocated and deallocated for all tasks (via `threadpool_set_resource_manager`).
 1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
 1. The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
 1. Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
@@ -170,16 +173,18 @@ typedef struct {
 ```
 A `job` of type `job_t` would then be passed to `threadpool_add_task`.
 
+The task post-processing pattern stands in 3 steps :
+
 1. Before `job` is passed to `threadpool_add_task`:
-  - `input` data is set ;
-  - `done` is set to 0 ;
+   - `input` data is set ;
+   - `done` is set to 0 ;
 1. In the user-defined function `work`:
-  - the previously set `input` data is used to compute the `result` data of the task ;
-  - `done` is set to 1 (and therefore remains to 0 if the task was canceled by `threadpool_cancel_task`) ;
+   - the previously set `input` data is used to compute the `result` data of the task ;
+   - `done` is set to 1 (and therefore remains to 0 if the task was canceled by `threadpool_cancel_task`) ;
 1. In the user-defined function `job_delete`:
-  - if `done` is set to 1, an aggregated result of all the tasks can then be multi-thread-safely updated from `result` ;
-    `global_data`, passed to `threadpool_create_and_start` and retrievable by `threadpool_global_data`, is a possible choice to hold the aggregated result.
-  - any required deallocation of `job` is done.
+   - if `done` is set to 1, an aggregated result of all the tasks can then be multi-thread-safely updated from `result` ;
+     `global_data`, passed to `threadpool_create_and_start` and retrievable by `threadpool_global_data`, is a possible choice to hold the aggregated result ;
+   - any required deallocation of `job` is done.
 
 See below for the example [fuzzy words](#fuzzy-words) of such a pattern.
 
@@ -191,7 +196,7 @@ The global data of a thread pool (`global_data` as passed to `threadpool_create_
 
 - should be fully initialized before `threadpool_create_and_start` is called ;
 - should survive after `threadpool_wait_and_destroy` is called ;
-- can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+- can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`), `allocator` and `deallocator` (as passed to `threadpool_set_resource_manager`) with :
 
 ```c
 void *threadpool_global_data (void)
@@ -278,6 +283,41 @@ A handler `threadpool_monitor_to_terminal` is available for convenience:
 - It displays monitoring data as text sent to a stream of type `FILE *`, passed as the third argument of `threadpool_set_monitor`.
   `stderr` will used by default if this third argument is `NULL`.
 
+### 7. Manage global resources
+
+#### Allocating and releasing global resources
+
+In case external resources should be allocated for tasks processing (for instance a connection to a database), user-defined functions `allocator` and `deallocator` can be set with:
+
+```c
+void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
+```
+
+This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll as it has no effect if workers are already running.
+
+    - The user-defined function `allocator` will be called before processing the very first task ; it is passed the `global_data` of the thread pool.
+    - The user-defined function `deallocator` will be called after all tasks have been processed or canceled ; it is passed the resource to deallocate.
+
+Moreover, if the thread pool remains idle (waiting for tasks to process) for too long (see [below](#timeout-delay-of-idle-workers)), resources will be deallocated automatically, and will be reallocated automatically when the thread pool gets active again.
+
+#### Timeout delay of idle workers
+
+The timeout delay before thread pool internal and external resources are deallocated can be modified with:
+
+```c
+void threadpool_set_idle_timeout (struct threadpool *threadpool, double delay)
+```
+
+`delay`, in seconds, should be a non negative value and not greater then 1.000.000, otherwise it is ignored and `errno` is set to `EINVAL`.
+
+> This delay should be set to a large value than the time required to allocate global resources for tasks.
+
+The default delay is 0.1 seconds when a thread pool is created by `threadpool_create_and_start`.
+
+The delay is set to 10.000.000 seconds after `threadpool_set_resource_manager` is called :
+    - resources will not be deallocated by default if the thread pool is idle ;
+    - `threadpool_set_idle_timeout` can be called after `threadpool_set_resource_manager` to deallocate scarce resources after a specified idle delay.
+
 ## Examples
 
 Type `make` to compile and run the examples (in sub-folder [examples](examples)).
@@ -285,6 +325,8 @@ Type `make` to compile and run the examples (in sub-folder [examples](examples))
 ### Quick sort in place
 
 An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_wc_test.c` [here](examples/qsip).
+
+It sorts 2 bunches of 50 lists of 1.000.000 numbers. 
 
 Two encapsulated thread pools are used : one to distribute 100 tasks over 7 monitored threads, each task sorting 1000000 numbers distributed over the CPU threads.
 
@@ -295,7 +337,7 @@ Two encapsulated thread pools are used : one to distribute 100 tasks over 7 moni
 
 - `qsip_wc_test.c` is an example of a thread pool that sorts several arrays using the above parallelized version of the quick sort algorithm.
 
-    - It uses features such as global data, worker local data, task cancellation and monitoring.
+    - It uses features such as global data, worker local data, task cancellation, (fake) resource management and monitoring.
 
 Running this example yields:
 ```
@@ -303,21 +345,21 @@ Running this example yields:
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times:
 Initializing 100,000,000 random numbers...
 7 workers requested and processing...
-(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (-) idle workers.
+(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (~) idle workers.
 [0x56d79ea0f780 (7)][    0.0000s][   0] 
 [0x56d79ea0f780 (7)][    0.0002s][   1] .
 Will go to sleep for 16 seconds...
 [0x56d79ea0f780 (7)][    0.0002s][   2] ..
 [0x56d79ea0f780 (7)][    0.0002s][   3] ...
 ...
-[0x56d79ea0f780 (7)][   11.5006s][  50] ==================================================-
+[0x56d79ea0f780 (7)][   11.5006s][  50] ==================================================~
 [0x56d79ea0f780 (7)][   11.5545s][  50] ==================================================
 Stop sleeping after 16 seconds.
 [0x56d79ea0f780 (7)][   16.0011s][  51] ==================================================.
 [0x56d79ea0f780 (7)][   16.0013s][  52] ==================================================..
 ...
-[0x56d79ea0f780 (7)][   20.7538s][ 100] ================================================================================*///////////////////--
-[0x56d79ea0f780 (7)][   20.8361s][ 100] ================================================================================*///////////////////-
+[0x56d79ea0f780 (7)][   20.7538s][ 100] ================================================================================*///////////////////~~
+[0x56d79ea0f780 (7)][   20.8361s][ 100] ================================================================================*///////////////////~
 [0x56d79ea0f780 (7)][   20.8542s][ 100] ================================================================================*///////////////////
 [0x56d79ea0f780 (7)][   21.5008s][ 100] =================================================================================///////////////////
 Done.
@@ -330,7 +372,7 @@ This [example](examples/fuzzyword) matches a list of french fuzzy words against 
 Two encapsulated thread pools are used : one to distribute the list of words on one monitored single thread (words are processed sequentially),
 each word being compared to the entries (distributed over the CPU threads) of the dictionary.
 
-It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe-task-post-processing).
+It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe-task-post-processing) and `threadpool_set_resource_manager` for [global resource management](#7-manage-global-resources).
 
 ## Implementation insights
 

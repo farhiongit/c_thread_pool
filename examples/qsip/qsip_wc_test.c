@@ -89,6 +89,24 @@ worker (struct threadpool *threadpool, void *base)
   return ret;
 }
 
+static void *
+res_alloc (void *)
+{
+  static unsigned int i = 2;
+  fprintf (stdout, "Allocate resources...\n");
+  sleep (i);
+  fprintf (stdout, "Resources allocated.\n");
+  return &i;
+}
+
+static void
+res_dealloc (void *i)
+{
+  fprintf (stdout, "Deallocate resources...\n");
+  sleep (*(unsigned int *) i);
+  fprintf (stdout, "Resources deallocated.\n");
+}
+
 int
 main ()
 {
@@ -113,6 +131,8 @@ main ()
   size_t nb_workers = strlen (threads_tags);
   fprintf (stdout, _("%zu workers requested and processing...\n"), nb_workers);
   struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd, tag, untag);    // Start 7 workers
+  threadpool_set_resource_manager (tp, res_alloc, res_dealloc);
+  threadpool_set_idle_timeout (tp, 1);
   threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0);
   size_t i = 0;
   size_t task_id;
@@ -124,15 +144,19 @@ main ()
   for (; i < (size_t) TIMES; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (1);
+  fprintf (stdout, _("Canceling one task.\n"));
   threadpool_cancel_task (tp, task_id);
   threadpool_cancel_task (tp, task_id);
   sleep (1);
+  fprintf (stdout, _("Canceling two tasks.\n"));
   threadpool_cancel_task (tp, LAST_TASK);
   threadpool_cancel_task (tp, LAST_TASK);
   sleep (1);
+  fprintf (stdout, _("Canceling two tasks.\n"));
   threadpool_cancel_task (tp, NEXT_TASK);
   threadpool_cancel_task (tp, NEXT_TASK);
   sleep (1);
+  fprintf (stdout, _("Canceling all tasks.\n"));
   threadpool_cancel_task (tp, ALL_TASKS);
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, _("Done.\n"));
