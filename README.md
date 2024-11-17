@@ -29,18 +29,21 @@ $ make libs
 cc -O -fPIC   -c -o wqm.o wqm.c
 ar rcs libwqm.a wqm.o
 libwqm.a:wqm.o:0000000000000010 R ALL_TASKS
-libwqm.a:wqm.o:0000000000000000 R LAST_TASK
-libwqm.a:wqm.o:0000000000000020 R NB_CPU
-libwqm.a:wqm.o:0000000000000008 R NEXT_TASK
-libwqm.a:wqm.o:0000000000000018 R SEQUENTIAL
-libwqm.a:wqm.o:00000000000003a4 T threadpool_add_task
-libwqm.a:wqm.o:0000000000000bb6 T threadpool_cancel_task
-libwqm.a:wqm.o:00000000000001d5 T threadpool_create_and_start
-libwqm.a:wqm.o:0000000000000b34 T threadpool_global_data
-libwqm.a:wqm.o:0000000000000027 T threadpool_monitor_to_terminal
-libwqm.a:wqm.o:0000000000000688 T threadpool_set_monitor
-libwqm.a:wqm.o:0000000000000715 T threadpool_wait_and_destroy
-libwqm.a:wqm.o:0000000000000803 T threadpool_worker_local_data
+libwqm.a:wqm.o:0000000000000020 R LAST_TASK
+libwqm.a:wqm.o:0000000000000000 R NB_CPU
+libwqm.a:wqm.o:0000000000000018 R NEXT_TASK
+libwqm.a:wqm.o:0000000000000008 R SEQUENTIAL
+libwqm.a:wqm.o:0000000000000eda T threadpool_add_task
+libwqm.a:wqm.o:0000000000001405 T threadpool_cancel_task
+libwqm.a:wqm.o:0000000000000570 T threadpool_create_and_start
+libwqm.a:wqm.o:00000000000013d0 T threadpool_global_data
+libwqm.a:wqm.o:00000000000016d6 T threadpool_global_resource
+libwqm.a:wqm.o:0000000000000386 T threadpool_monitor_to_terminal
+libwqm.a:wqm.o:00000000000015ac T threadpool_set_idle_timeout
+libwqm.a:wqm.o:00000000000002d2 T threadpool_set_monitor
+libwqm.a:wqm.o:0000000000001641 T threadpool_set_resource_manager
+libwqm.a:wqm.o:000000000000121c T threadpool_wait_and_destroy
+libwqm.a:wqm.o:0000000000001395 T threadpool_worker_local_data
 cc -shared -o libwqm.so wqm.o
 ```
 
@@ -54,10 +57,9 @@ cc -shared -o libwqm.so wqm.o
 
 | Function | Description |
 | - | - |
-| `threadpool_create_and_start` | Create and start a new pool of workers |
-| `threadpool_add_task` | Add a task to the pool of workers |
-| `threadpool_cancel_task` | Cancel all pending tasks, the last or next submitted task, or a specific task |
-| `threadpool_wait_and_destroy` | Wait for all the tasks to be done and destroy the pool of workers |
+| `threadpool_create_and_start` | Creates and starts a new pool of workers |
+| `threadpool_add_task` | Adds a task to the pool of workers |
+| `threadpool_wait_and_destroy` | Waits for all the tasks to be done and destroy the pool of workers |
 
 Those features are detailed below.
 
@@ -65,11 +67,13 @@ Those features are detailed below.
 
 | Function | Description |
 | - | - |
-| `threadpool_global_data` | Access the user defined shared global data of the pool of workers |
-| `threadpool_worker_local_data` | Access the user defined local data of a worker |
-| `threadpool_set_idle_timeout` | Modify the idle time out (default is 0.1 s) |
-| `threadpool_set_resource_manager` | Define the resource manager functions |
-| `threadpool_set_monitor` | Set a user-defined function to retrieve and display monitoring information |
+| `threadpool_cancel_task` | Cancels all pending tasks, the last or next submitted task, or a specific task |
+| `threadpool_global_data` | Gives access to the user defined shared global data of the pool of workers |
+| `threadpool_worker_local_data` | Gives access to the user defined local data of a worker |
+| `threadpool_set_resource_manager` | Defines the resource manager functions |
+| `threadpool_global_resource` | Gives access to the global resource of the thread pool |
+| `threadpool_set_idle_timeout` | Modifies the idle time out (default is 0.1 s) |
+| `threadpool_set_monitor` | Sets a user-defined function to retrieve and display monitoring information |
 
 Those features are detailed below.
 
@@ -196,11 +200,13 @@ The global data of a thread pool (`global_data` as passed to `threadpool_create_
 
 - should be fully initialized before `threadpool_create_and_start` is called ;
 - should survive after `threadpool_wait_and_destroy` is called ;
-- can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`), `allocator` and `deallocator` (as passed to `threadpool_set_resource_manager`) with :
+- can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`), and `deallocator` (as passed to `threadpool_set_resource_manager`) with :
 
 ```c
 void *threadpool_global_data (void)
 ```
+
+> `threadpool_global_data` can not be called in the resource `allocator` set by `threadpool_set_resource_manager`.
 
 The local data of a thread (created by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
 
@@ -293,30 +299,31 @@ In case external resources should be allocated for tasks processing (for instanc
 void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
 ```
 
-This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll as it has no effect if workers are already running.
+> This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll as it has no effect if workers are already running (`errno` would be set to `ECANCELED`).
 
-    - The user-defined function `allocator` will be called before processing the very first task ; it is passed the `global_data` of the thread pool.
-    - The user-defined function `deallocator` will be called after all tasks have been processed or canceled ; it is passed the resource to deallocate.
+- The user-defined function `allocator` will be called before processing the very first task ; it is passed the `global_data` of the thread pool.
+- The user-defined function `deallocator` will be called after all tasks have been processed or canceled ; it is passed the resource to deallocate, as previously returned by `allocator`.
 
 Moreover, if the thread pool remains idle (waiting for tasks to process) for too long (see [below](#timeout-delay-of-idle-workers)), resources will be deallocated automatically, and will be reallocated automatically when the thread pool gets active again.
 
 #### Timeout delay of idle workers
 
-The timeout delay before thread pool internal and external resources are deallocated can be modified with:
+The timeout delay before thread pool internal and external resources are deallocated when a thread pool is kept idle for too long can be modified with:
 
 ```c
 void threadpool_set_idle_timeout (struct threadpool *threadpool, double delay)
 ```
 
-`delay`, in seconds, should be a non negative value and not greater then 1.000.000, otherwise it is ignored and `errno` is set to `EINVAL`.
+`delay`, in seconds, should be a non negative value, otherwise it is ignored and `errno` is set to `EINVAL`.
+It should neither greater then 10.000.000 seconds.
 
-> This delay should be set to a large value than the time required to allocate global resources for tasks.
+> This delay should be set to a larger value than the time required to allocate global resources for tasks. It should nevertheless be kept as low as possible to release unused scarce resources.
 
 The default delay is 0.1 seconds when a thread pool is created by `threadpool_create_and_start`.
 
-The delay is set to 10.000.000 seconds after `threadpool_set_resource_manager` is called :
+The delay is set to 10.000.000 seconds by default after `threadpool_set_resource_manager` is called :
     - resources will not be deallocated by default if the thread pool is idle ;
-    - `threadpool_set_idle_timeout` can be called after `threadpool_set_resource_manager` to deallocate scarce resources after a specified idle delay.
+    - `threadpool_set_idle_timeout` can be called after `threadpool_set_resource_manager` to lower the delay in order to deallocate scarce resources after a specified idle delay.
 
 ## Examples
 
@@ -341,33 +348,52 @@ Two encapsulated thread pools are used : one to distribute 100 tasks over 7 moni
 
 Running this example yields:
 ```
-./qsip_wc_test
+$ make qsip_wc_test
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times:
 Initializing 100,000,000 random numbers...
 7 workers requested and processing...
-(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (~) idle workers.
-[0x56d79ea0f780 (7)][    0.0000s][   0] 
-[0x56d79ea0f780 (7)][    0.0002s][   1] .
+Allocate resources...
+(=) succeeded tasks, (X) failed tasks, (*) processing tasks, (.) pending tasks, (/) canceled tasks, (~) idle thread pool.
+[0x5cbba68eb7d0 (7)][    0.0000s][   0] 
+[0x5cbba68eb7d0 (7)][    0.0002s][   1] .
+Resources allocated.
+[0x5cbba68eb7d0 (7)][    2.0006s][   1] .
+[0x5cbba68eb7d0 (7)][    2.0010s][   2] ..
 Will go to sleep for 16 seconds...
-[0x56d79ea0f780 (7)][    0.0002s][   2] ..
-[0x56d79ea0f780 (7)][    0.0002s][   3] ...
+[0x5cbba68eb7d0 (7)][    2.0012s][   3] ...
+[0x5cbba68eb7d0 (7)][    2.0014s][   4] ....
 ...
-[0x56d79ea0f780 (7)][   11.5006s][  50] ==================================================~
-[0x56d79ea0f780 (7)][   11.5545s][  50] ==================================================
+[0x5cbba68eb7d0 (7)][   13.1516s][  50] =================================================*
+[0x5cbba68eb7d0 (7)][   13.2413s][  50] ================================================== ~
+[0x5cbba68eb7d0 (7)][   14.1519s][  50] ================================================== ~
+Deallocate resources...
+[0x5cbba68eb7d0 (7)][   14.2414s][  50] ==================================================
+Resources deallocated.
+[0x5cbba68eb7d0 (7)][   16.2417s][  50] ==================================================
 Stop sleeping after 16 seconds.
-[0x56d79ea0f780 (7)][   16.0011s][  51] ==================================================.
-[0x56d79ea0f780 (7)][   16.0013s][  52] ==================================================..
+Allocate resources...
+[0x5cbba68eb7d0 (7)][   18.0050s][  51] ==================================================.
+Resources allocated.
+[0x5cbba68eb7d0 (7)][   20.0054s][  51] ==================================================.
+[0x5cbba68eb7d0 (7)][   20.0056s][  52] ==================================================..
 ...
-[0x56d79ea0f780 (7)][   20.7538s][ 100] ================================================================================*///////////////////~~
-[0x56d79ea0f780 (7)][   20.8361s][ 100] ================================================================================*///////////////////~
-[0x56d79ea0f780 (7)][   20.8542s][ 100] ================================================================================*///////////////////
-[0x56d79ea0f780 (7)][   21.5008s][ 100] =================================================================================///////////////////
+[0x5cbba68eb7d0 (7)][   24.6119s][ 100] ===============================================================*////////////////////////////////////
+[0x5cbba68eb7d0 (7)][   24.7960s][ 100] ================================================================//////////////////////////////////// ~
+Deallocate resources...
+Resources deallocated.
+[0x5cbba68eb7d0 (7)][   26.7966s][ 100] ================================================================////////////////////////////////////
 Done.
 ```
 
 ### Fuzzy words
 
 This [example](examples/fuzzyword) matches a list of french fuzzy words against the french dictionary.
+
+Run it with:
+
+```
+$ make fuzzyword
+```
 
 Two encapsulated thread pools are used : one to distribute the list of words on one monitored single thread (words are processed sequentially),
 each word being compared to the entries (distributed over the CPU threads) of the dictionary.
@@ -385,15 +411,15 @@ It has been heavily tested, but bugs are still possible. Please don't hesitate t
 
 Workers are started automatically when needed, that is when a new task is submitted whereas all workers are already booked.
 Workers are running in parallel, asynchronously.
-Each worker can process a task at a time. A task is processed as soon as a worker is available.
+Each worker can process one task at a time. A task is processed as soon as a worker is available.
 
-A worker stops when all submitted tasks have been processed or after an idle time (half a second).
+A worker stops when all submitted tasks have been processed or after an idle time.
 Idle workers are kept ready for new tasks for a short time and are then stopped automatically to release system resources.
 
 For instance, say a task requires 2 seconds to be processed and the maximum idle delay for a worker is half a second:
 
 - if the task is repeatedly submitted every 3 seconds to the thread pool, one worker will be created and activated on submission, and stopped after completion of the task and an idle time (of half a second).
-- if the task is submitted every 2.4 seconds to the thread pool, one worker will be created and activated on submission, kept idle and ready for the next task.
+- if the task is submitted every 2.4 seconds to the thread pool, one worker will be created and activated on submission, kept idle and reactivated for the next task.
 - if the task is submitted every 2 seconds, one worker will be active to process the tasks.
 - if the task is submitted every second, two workers will be active to process the tasks.
 - if the rate of submitted tasks is very high, the maximum number of workers (as passed to `threadpool_create_and_start ()`) will be active.

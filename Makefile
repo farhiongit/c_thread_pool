@@ -1,5 +1,4 @@
-#CFLAGS+=-O
-CFLAGS+=-g
+CFLAGS+=-O
 CFLAGS+=-fPIC
 
 .PHONY: all
@@ -37,6 +36,7 @@ libwqm.a:
 
 libwqm.so:
 
+wqm.o: CFLAGS+=-std=c11
 wqm.o: wqm.c wqm.h
 
 lib%.so: LDFLAGS+=-shared

@@ -444,7 +444,7 @@ threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocato
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
   if (threadpool->nb_running_workers || threadpool->resource)
-    errno = EINVAL;
+    errno = ECANCELED;
   else
   {
     threadpool->resource_allocator = allocator;
