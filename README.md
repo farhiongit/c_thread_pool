@@ -208,7 +208,7 @@ void *threadpool_global_data (void)
 
 > `threadpool_global_data` can not be called in the resource `allocator` set by `threadpool_set_resource_manager`.
 
-The local data of a thread (created by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+The local data of a worker (created and returned by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
 
 ```c
 void *threadpool_worker_local_data (void)
@@ -251,10 +251,10 @@ It then waits for all the tasks to be completed by workers.
 
 A monitoring of the thread pool activity can optionally be activated by calling
 ```c
-void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new, void *arg)
+void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler handler, void *arg)
 ```
 
-A user-defined handler function is passed as second argument, with signature
+A user-defined `handler` function is passed as second argument, with signature
 ```c
 void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg)
 ```
@@ -287,7 +287,7 @@ A handler `threadpool_monitor_to_terminal` is available for convenience:
 
 - It can be passed as the second argument of `threadpool_set_monitor`.
 - It displays monitoring data as text sent to a stream of type `FILE *`, passed as the third argument of `threadpool_set_monitor`.
-  `stderr` will used by default if this third argument is `NULL`.
+  `stderr` will be used by default if this third argument is `NULL`.
 
 ### 7. Manage global resources
 
@@ -301,10 +301,22 @@ void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*all
 
 > This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll as it has no effect if workers are already running (`errno` would be set to `ECANCELED`).
 
-- The user-defined function `allocator` will be called before processing the very first task ; it is passed the `global_data` of the thread pool.
-- The user-defined function `deallocator` will be called after all tasks have been processed or canceled ; it is passed the resource to deallocate, as previously returned by `allocator`.
+- The user-defined function `allocator`:
+    - should fully initialize and return the global resource of the thread pool ;
+    - is passed the `global_data` of the thread pool as an argument ;
+    - will generally be called once per thread pool, before processing the very first task.
+- The user-defined function `deallocator`:
+    - should fully release the global resource of the thread pool ;
+    - is passed the resource to deallocate, as previously returned by `allocator`, as an argument ;
+    - will generally be called once per thread pool, after all tasks have been processed or canceled.
 
 Moreover, if the thread pool remains idle (waiting for tasks to process) for too long (see [below](#timeout-delay-of-idle-workers)), resources will be deallocated automatically, and will be reallocated automatically when the thread pool gets active again.
+
+The global resource of a thread pool (as returned by the `allocateor` passed to `threadpool_set_resource_manager`) can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+
+```c
+void *threadpool_global_resource (void)
+```
 
 #### Timeout delay of idle workers
 

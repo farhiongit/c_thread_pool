@@ -43,7 +43,7 @@ size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id);
 void threadpool_wait_and_destroy (struct threadpool *threadpool);
 
 // ** Options for 'threadpool_create_and_start' **
-// Global data pointed to by 'global_data' will be accessible to worker through a call to 'threadpool_global_data'.
+// Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);
 
 // Workers local data constructed by 'make_local' and destroyed by 'delete_local' will be (MT-safely) accessible to worker through a call to 'threadpool_worker_local_data'.
@@ -68,7 +68,7 @@ void threadpool_set_idle_timeout (struct threadpool *threadpool, double delay);
 // Resources will be deallocated and reallocated after idle timeout.
 void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource));
 
-// Global data pointed to by 'global_data' will be accessible to worker through a call to 'threadpool_global_data'.
+// Global resources allocated with `allocator` will be accessible through a call to 'threadpool_global_resource'.
 void *threadpool_global_resource (void);
 
 struct threadpool_monitor
@@ -87,7 +87,7 @@ struct threadpool_monitor
 typedef void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg);
 // Set monitor handler.
 // Monitor handler will be called asynchronously (without interfering with the execution of workers) and executed thread-safely and not after `threadpool_wait_and_destroy` has been called.
-void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new, void *arg);
+void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler displayer, void *arg);
 
 // A monitor handler to FILE stream.
 void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream);

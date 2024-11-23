@@ -1,0 +1,24 @@
+# French translations for libwqm package
+# Traductions françaises du paquet libwqm.
+# Copyright (C) 2024 THE libwqm'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the libwqm package.
+# Automatically generated, 2024.
+#
+msgid   ""
+msgstr  "Project-Id-Version: libwqm\n"
+        "Report-Msgid-Bugs-To: \n"
+        "POT-Creation-Date: 2024-11-20 23:48+0100\n"
+        "PO-Revision-Date: 2024-11-20 22:03+0100\n"
+        "Last-Translator: Automatically generated\n"
+        "Language-Team: none\n"
+        "Language: fr\n"
+        "MIME-Version: 1.0\n"
+        "Content-Type: text/plain; charset=UTF-8\n"
+        "Content-Transfer-Encoding: 8bit\n"
+        "Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid   "Thread pool: (R) running, (I) idle, (S) stopped."
+msgstr  "Pool  : (R), actif, (I) en attente, (S) arrêté."
+
+msgid   "Tasks      : (=) succeeded, (X) failed, (*) processing, (.) pending, (/) canceled."
+msgstr  "Tâche : (=) réussie, (X) échouée, (*) en cours, (.) en attente, (/) annulée."

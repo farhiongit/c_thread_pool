@@ -93,7 +93,7 @@ static void *
 res_alloc (void *)
 {
   static unsigned int i = 2;
-  fprintf (stdout, "Allocate resources...\n");
+  fprintf (stdout, "Allocating resources...\n");
   sleep (i);
   fprintf (stdout, "Resources allocated.\n");
   return &i;
@@ -102,7 +102,7 @@ res_alloc (void *)
 static void
 res_dealloc (void *i)
 {
-  fprintf (stdout, "Deallocate resources...\n");
+  fprintf (stdout, "Deallocating resources...\n");
   sleep (*(unsigned int *) i);
   fprintf (stdout, "Resources deallocated.\n");
 }
@@ -138,9 +138,9 @@ main ()
   size_t task_id;
   for (; i < ((size_t) TIMES) / 2; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
-  fprintf (stdout, _("Will go to sleep for %i seconds...\n"), TIMES / 6);
-  sleep (TIMES / 6);
-  fprintf (stdout, _("Stop sleeping after %i seconds.\n"), TIMES / 6);
+  fprintf (stdout, _("Will go to sleep for %i seconds...\n"), TIMES / 6 + 1);
+  sleep (TIMES / 6 + 1);
+  fprintf (stdout, _("Stop sleeping after %i seconds.\n"), TIMES / 6 + 1);
   for (; i < (size_t) TIMES; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (1);

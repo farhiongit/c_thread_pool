@@ -5,6 +5,7 @@
 #include <wctype.h>
 #include <stdint.h>
 #include <limits.h>
+#include <assert.h>
 #include "wqm.h"
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -56,7 +57,7 @@ tp2_job_free (void *arg)
 {
   struct tp2_global *tp2_global = threadpool_global_data ();
   struct tp2_job *tp2_job = arg;
-  if (tp2_job->result.d <= tp2_global->dmatch)
+  if (tp2_job->result.d <= tp2_global->dmatch)  // Aggregation for job results.
   {
     tp2_global->match = tp2_job->result.match;
     tp2_global->dmatch = tp2_job->result.d;
@@ -131,7 +132,8 @@ tp1_res_alloc (void *global_data)
   const char *listofwords = ((struct tp1_global *) global_data)->listofwords;
   fprintf (stderr, _("Reading the french dictionnary of words %s...\n"), listofwords);
   res.nb_lines = 0;
-  FILE *f = fopen (listofwords, "r,ccs=UTF-8"); // File is encoded in UTF-8.
+  FILE *f;
+  assert ((f = fopen (listofwords, "r,ccs=UTF-8")));    // File is encoded in UTF-8.
   for (wchar_t line[100]; fgetws (line, 100, f);)       // Reads a string of at most n-1 wide characters, and adds a terminating null wide character
     res.nb_lines++;
   res.lines = malloc (res.nb_lines * sizeof (*res.lines));
@@ -186,7 +188,7 @@ static void
 tp1_job_free (void *arg)
 {
   struct tp1_job *ta = arg;
-  fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);
+  fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);     // Job post-processing.
 
   free (ta->input.wa);
   free (ta);
@@ -202,9 +204,9 @@ get_match (wchar_t *wa, size_t nb_lines, const wchar_t (*const lines)[100], wcha
   struct tp2_global tp2_global = {.match = 0,.dmatch = ULONG_MAX };
   for (size_t i = 0; !tp2_global.match && i < nb_lines; i++)
     if (!wcscmp (wa, lines[(i + start) % nb_lines]))    // To avoid false-sharing.
-      tp2_global.match = lines[(i + start) % nb_lines];
+      tp2_global.match = lines[(i + start) % nb_lines]; // Perfect match found.
 
-  if (!tp2_global.match)
+  if (!tp2_global.match)        // Search for an approximate match.
   {
     wchar_t *fuzzyword = wa;
 
