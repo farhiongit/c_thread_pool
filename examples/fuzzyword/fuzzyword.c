@@ -217,7 +217,8 @@ get_match (wchar_t *wa, size_t nb_lines, const wchar_t (*const lines)[100], wcha
     fuzzyword = collwa;
 #endif
 
-    struct threadpool *tp2 = threadpool_create_and_start (NB_CPU, &tp2_global, tp2_make_local, tp2_delete_local);
+    struct threadpool *tp2 = threadpool_create_and_start (NB_CPU, &tp2_global);
+    threadpool_set_worker_local_data_manager (tp2, tp2_make_local, tp2_delete_local);
     for (size_t i = 0; tp2_global.dmatch && i < nb_lines; i++)
     {
       const wchar_t *realword = lines[(i + start) % nb_lines];  // To avoid false-sharing.
@@ -257,8 +258,8 @@ main (int argc, char *argv[])
   setlocale (LC_ALL, "fr_FR.UTF-8");    // File listofwords is a list of french words.
 
   struct tp1_global tp1_global = { "liste.de.mots.francais.frgut.txt" };
-  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global, 0, 0);
-  threadpool_set_resource_manager (tp1, tp1_res_alloc, tp1_res_dealloc);
+  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global);
+  threadpool_set_global_resource_manager (tp1, tp1_res_alloc, tp1_res_dealloc);
   threadpool_set_monitor (tp1, threadpool_monitor_to_terminal, stderr);
   fprintf (stderr, "Searching for matching words...\n");
   for (int iarg = 1; iarg < argc; iarg++)

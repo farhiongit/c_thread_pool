@@ -17,7 +17,7 @@ examples/qsip/qsip_wc_test: LDFLAGS=-L.
 examples/qsip/qsip_wc_test: LDLIBS=-lwqm -lm
 examples/qsip/qsip_wc_test: examples/qsip/qsip_wc_test.o examples/qsip/qsip_wc.o
 
-#examples/qsip/qsip_wc_test.o: CPPFLAGS+=-DSIZE=100 -DTIMES=10
+#examples/qsip/qsip_wc_test.o: CPPFLAGS+=-DSIZE=100 -DTIMES=10    # for valgrind or gdb
 examples/qsip/qsip_wc_test.o: CPPFLAGS+=-I.
 examples/qsip/qsip_wc_test.o: examples/qsip/qsip_wc_test.c
 
@@ -65,4 +65,7 @@ po/fr.po: po/libwqm.pot
 po/libwqm.pot: wqm.c
 	mkdir -p "$(dir $@)"
 	xgettext -o $@ -LC -k_ -i --package-name=libwqm --no-wrap --no-location $^
+
+README.html: README.md
+	pandoc -f markdown $^ > $@
 

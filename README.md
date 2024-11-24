@@ -29,21 +29,22 @@ $ make libs
 cc -O -fPIC   -c -o wqm.o wqm.c
 ar rcs libwqm.a wqm.o
 libwqm.a:wqm.o:0000000000000010 R ALL_TASKS
-libwqm.a:wqm.o:0000000000000020 R LAST_TASK
-libwqm.a:wqm.o:0000000000000000 R NB_CPU
-libwqm.a:wqm.o:0000000000000018 R NEXT_TASK
-libwqm.a:wqm.o:0000000000000008 R SEQUENTIAL
-libwqm.a:wqm.o:0000000000000eda T threadpool_add_task
-libwqm.a:wqm.o:0000000000001405 T threadpool_cancel_task
-libwqm.a:wqm.o:0000000000000570 T threadpool_create_and_start
-libwqm.a:wqm.o:00000000000013d0 T threadpool_global_data
-libwqm.a:wqm.o:00000000000016d6 T threadpool_global_resource
-libwqm.a:wqm.o:0000000000000386 T threadpool_monitor_to_terminal
-libwqm.a:wqm.o:00000000000015ac T threadpool_set_idle_timeout
-libwqm.a:wqm.o:00000000000002d2 T threadpool_set_monitor
-libwqm.a:wqm.o:0000000000001641 T threadpool_set_resource_manager
-libwqm.a:wqm.o:000000000000121c T threadpool_wait_and_destroy
-libwqm.a:wqm.o:0000000000001395 T threadpool_worker_local_data
+libwqm.a:wqm.o:0000000000000000 R LAST_TASK
+libwqm.a:wqm.o:0000000000000020 R NB_CPU
+libwqm.a:wqm.o:0000000000000008 R NEXT_TASK
+libwqm.a:wqm.o:0000000000000018 R SEQUENTIAL
+libwqm.a:wqm.o:000000000000046a T threadpool_add_task
+libwqm.a:wqm.o:0000000000000d80 T threadpool_cancel_task
+libwqm.a:wqm.o:0000000000000272 T threadpool_create_and_start
+libwqm.a:wqm.o:0000000000000cfe T threadpool_global_data
+libwqm.a:wqm.o:0000000000000fa4 T threadpool_global_resource
+libwqm.a:wqm.o:000000000000002c T threadpool_monitor_to_terminal
+libwqm.a:wqm.o:0000000000000f30 T threadpool_set_global_resource_manager
+libwqm.a:wqm.o:0000000000000ecd T threadpool_set_idle_timeout
+libwqm.a:wqm.o:0000000000000798 T threadpool_set_monitor
+libwqm.a:wqm.o:0000000000000fc8 T threadpool_set_worker_local_data_manager
+libwqm.a:wqm.o:000000000000081b T threadpool_wait_and_destroy
+libwqm.a:wqm.o:0000000000000909 T threadpool_worker_local_data
 cc -shared -o libwqm.so wqm.o
 ```
 
@@ -69,8 +70,9 @@ Those features are detailed below.
 | - | - |
 | `threadpool_cancel_task` | Cancels all pending tasks, the last or next submitted task, or a specific task |
 | `threadpool_global_data` | Gives access to the user defined shared global data of the pool of workers |
+| `threadpool_set_worker_local_data_manager` | Defines the workers' local data manager functions |
 | `threadpool_worker_local_data` | Gives access to the user defined local data of a worker |
-| `threadpool_set_resource_manager` | Defines the resource manager functions |
+| `threadpool_set_global_resource_manager` | Defines the resource manager functions |
 | `threadpool_global_resource` | Gives access to the global resource of the thread pool |
 | `threadpool_set_idle_timeout` | Modifies the idle time out (default is 0.1 s) |
 | `threadpool_set_monitor` | Sets a user-defined function to retrieve and display monitoring information |
@@ -84,8 +86,8 @@ This implementation of a thread pool brings unique features, not found anywhere 
 1. It uses the standard (minimalist) C11 thread library <threads.h>, rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
 1. The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user defined function `job_delete ()`), allowing collecting data at task termination.
 1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
-1. Local data can be defined and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
-1. Global resources can be allocated and deallocated for all tasks (via `threadpool_set_resource_manager`).
+1. Local data can be defined  (via `threadpool_set_worker_local_data_manager`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager`) and accessed (via `threadpool_global_resource`) for the thread pool.
 1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
 1. The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
 1. Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
@@ -96,13 +98,11 @@ Those features are detailed below.
 
 The API is defined in file `wqm.h`.
 
-### 1. Create a thread pool
+### Create a thread pool
 
 ```c
 struct threadpool *threadpool_create_and_start (size_t nb_workers,
-                                                void *global_data,
-                                                void *(*make_local) (void),
-                                                void (*delete_local) (void *local_data))
+                                                void *global_data)
 ```
 
 A thread pool is declared and started with a call to `threadpool_create_and_start ()`.
@@ -117,15 +117,8 @@ The maximum number of workers can be defined higher than the number of CPUs as w
 
 - The second argument `global_data`, if not null, is a pointer to global data.
   This pointer can next be retrieved by tasks with the function `threadpool_global_data ()`.
-- The third argument `make_local`, if not null, is a user defined function that returns a pointer to data for a local usage by a worker.
-  This pointer can next be retrieved by tasks with the function `threadpool_worker_local_data ()`.
-  `make_local` is called in a multi-thread-safe manner at the initialization of a worker and is passed the pointer to global data.
-  `make_local` can therefore safely access (and update) the content of `global_data` if needed.
-- The fourth argument `delete_local`, if not null, is a user defined function that is executed to release and destroys the local data used by each worker (passed as an argument) when a worker stops.
-  `delete_local` is called in a multi-thread-safe manner at the termination of a worker and is passed the pointer to global data.
-  `delete_local` can therefore safely access (and update) the content of `global_data` if needed (to gather results or statistics for instance).
 
-### 2. Submit a task
+### Submit a task
 
 ```c
 size_t threadpool_add_task (struct threadpool *threadpool,
@@ -150,7 +143,7 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 
 ###### Options
 
-- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#4-cancel-tasks).)
+- The fourth argument `job_delete`, if not null, is a user defined function called at termination of the task (after processing or [cancellation](#cancel-tasks).)
   This function receives the `job` of the task as an argument.
 
 `job_delete` should be used if the job was allocated dynamically in order to release and destroy the data after `work` is done and avoid memory leaks.
@@ -179,7 +172,7 @@ A `job` of type `job_t` would then be passed to `threadpool_add_task`.
 
 The task post-processing pattern stands in 3 steps :
 
-1. Before `job` is passed to `threadpool_add_task`:
+1. A `job` is allocated and initialized before it is passed to `threadpool_add_task`:
    - `input` data is set ;
    - `done` is set to 0 ;
 1. In the user-defined function `work`:
@@ -192,7 +185,7 @@ The task post-processing pattern stands in 3 steps :
 
 See below for the example [fuzzy words](#fuzzy-words) of such a pattern.
 
-### 3. Access to global and local thread data
+### Access to global and local thread data
 
 Global and local data of threads can be retrieved and updated safely in the context of working threads.
 
@@ -206,9 +199,13 @@ The global data of a thread pool (`global_data` as passed to `threadpool_create_
 void *threadpool_global_data (void)
 ```
 
-> `threadpool_global_data` can not be called in the resource `allocator` set by `threadpool_set_resource_manager`.
+> `threadpool_global_data` can _not_ be called in the resource `allocator` set by `threadpool_set_resource_manager`.
 
-The local data of a worker (created and returned by `make_local` and destroyed by `delete_local`, as passed to `threadpool_create_and_start`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+The local data of a worker (created and returned by `make_local` and destroyed by `delete_local`, as passed to `threadpool_set_worker_local_data_manager`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+
+```c
+void threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data))
+```
 
 ```c
 void *threadpool_worker_local_data (void)
@@ -216,7 +213,7 @@ void *threadpool_worker_local_data (void)
 
 > These two functions must be called in the context of a running thread, otherwise they return 0.
 
-### 4. Cancel tasks
+### Cancel tasks
 
 ```c
 size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
@@ -234,7 +231,7 @@ Canceled tasks won't be processed, but `job_delete`, as optionally passed to `th
 
 The function returns the number of canceled tasks, if any, or 0 if there are not any left pending task to be canceled.
 
-### 5. Wait for all submitted tasks to be completed
+### Wait for all submitted tasks to be completed
 
 ```c
 void threadpool_wait_and_destroy (struct threadpool *threadpool)
@@ -247,7 +244,7 @@ It then waits for all the tasks to be completed by workers.
 
 `threadpool` should not be used after a call to `threadpool_wait_and_destroy ()`.
 
-### 6. Monitor the thread pool activity
+### Monitor the thread pool activity
 
 A monitoring of the thread pool activity can optionally be activated by calling
 ```c
@@ -289,17 +286,42 @@ A handler `threadpool_monitor_to_terminal` is available for convenience:
 - It displays monitoring data as text sent to a stream of type `FILE *`, passed as the third argument of `threadpool_set_monitor`.
   `stderr` will be used by default if this third argument is `NULL`.
 
-### 7. Manage global resources
+### Manage data
 
-#### Allocating and releasing global resources
+Data used in the context of a thread pool can be managed globally or locally with four different ways, depending on the scope and life-cycle of the data.
 
-In case external resources should be allocated for tasks processing (for instance a connection to a database), user-defined functions `allocator` and `deallocator` can be set with:
+| Scope | Access | Management |
+|- | - | - |
+| Thread pool | `threadpool_global_data` | `threadpool_create_and_start`, see [Manage global data](#manage-global-data) |
+| Active thread pool (running workers) | `threadpool_global_resource` | `threadpool_set_global_resource_manager`, see [Manage global resources](#manage-global-resources) |
+| Worker | `threadpoolworker_local_data` | `threadpool_set_worker_local_data_manager`, see [Manage worker local data](#manage-worker-local-data) |
+| Task | `job` in `work` | `threadpool_add_task`, see [Manage task data](#manage-task-data) |
+
+#### Manage global data
+
+A global context data of a thread pool can be passed as second argument when it is created with `threadpool_create_and_start`.
+This data should be allocated (statically, automatically or dynamically) before calling `threadpool_create_and_start` and respectively deallocated after calling `threadpool_wait_and_destroy`.
+
+This global data of a thread pool can be accessed inside:
+
+- user-defined functions `allocator` and `deallocator` passed to `threadpool_set_global_resource_manager` ;
+- user-defined functions `make_local` and `delete_local` (as passed to `threadpool_set_worker_local_data_manager`) ;
+- user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
 
 ```c
-void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
+void *threadpool_global_data (void)
 ```
 
-> This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll as it has no effect if workers are already running (`errno` would be set to `ECANCELED`).
+#### Manage global resources
+
+In case external resources should be allocated for tasks processing (for instance a shared connection to a database), user-defined functions `allocator` and `deallocator` can be set with:
+
+```c
+void threadpool_set_global_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
+```
+
+> This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll with `threadpool_add_task`.
+> Otherwise, it would have no effect (as workers are already running) and `errno` would be set to `ECANCELED`.
 
 - The user-defined function `allocator`:
     - should fully initialize and return the global resource of the thread pool ;
@@ -312,13 +334,13 @@ void threadpool_set_resource_manager (struct threadpool *threadpool, void *(*all
 
 Moreover, if the thread pool remains idle (waiting for tasks to process) for too long (see [below](#timeout-delay-of-idle-workers)), resources will be deallocated automatically, and will be reallocated automatically when the thread pool gets active again.
 
-The global resource of a thread pool (as returned by the `allocateor` passed to `threadpool_set_resource_manager`) can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_create_and_start`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+The global resource of a thread pool (as returned by the `allocator` passed to `threadpool_set_global_resource_manager`) can be accessed inside user-defined functions `make_local`, `delete_local` (as passed to `threadpool_set_worker_local_data_manager`), `work` and `job_delete` (as passed to `threadpool_add_task`) with :
 
 ```c
 void *threadpool_global_resource (void)
 ```
 
-#### Timeout delay of idle workers
+##### Timeout delay of idle workers
 
 The timeout delay before thread pool internal and external resources are deallocated when a thread pool is kept idle for too long can be modified with:
 
@@ -327,15 +349,47 @@ void threadpool_set_idle_timeout (struct threadpool *threadpool, double delay)
 ```
 
 `delay`, in seconds, should be a non negative value, otherwise it is ignored and `errno` is set to `EINVAL`.
-It should neither greater then 10.000.000 seconds.
+It can not exceed 10.000.000 seconds.
 
-> This delay should be set to a larger value than the time required to allocate global resources for tasks. It should nevertheless be kept as low as possible to release unused scarce resources.
+> This delay should be set to a value larger than the time required to allocate global resources for tasks. It should nevertheless be kept as low as possible to release unused scarce resources when workers are kept idle for a long period.
 
 The default delay is 0.1 seconds when a thread pool is created by `threadpool_create_and_start`.
 
-The delay is set to 10.000.000 seconds by default after `threadpool_set_resource_manager` is called :
-    - resources will not be deallocated by default if the thread pool is idle ;
-    - `threadpool_set_idle_timeout` can be called after `threadpool_set_resource_manager` to lower the delay in order to deallocate scarce resources after a specified idle delay.
+The delay is set to 10.000.000 seconds by default after `threadpool_set_global_resource_manager` is called : resources will not be deallocated by default if the thread pool is idle.
+`threadpool_set_idle_timeout` should be called _after_ `threadpool_set_global_resource_manager` to lower the delay in order to deallocate scarce resources after a specified idle delay.
+
+#### Manage worker local data
+
+In case resources should be allocated for each worker (for instance a connection to a database), user-defined functions `make_local` and `delete_local` can be set with:
+
+```c
+void threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data));
+```
+
+> This function should be called after `threadpool_create_and_start` and before adding tasks to the thread poll with `threadpool_add_task`.
+> Otherwise, it would have no effect (as workers are already running) and `errno` would be set to `ECANCELED`.
+
+`make_local` will be called when a worker is created and `delete_local` when it is terminated:
+
+- The argument `make_local`, if not null, is a user defined function that returns a pointer to data for a local usage by a worker.
+  This pointer can next be retrieved by tasks with the function `threadpool_worker_local_data ()`.
+  `make_local` is called in a multi-thread-safe manner at the initialization of a worker and is passed the pointer to global data.
+  `make_local` can therefore safely access (and update) the content of `global_data` if needed.
+- The argument `delete_local`, if not null, is a user defined function that is executed to release and destroys the local data used by each worker (passed as an argument) when a worker stops.
+  `delete_local` is called in a multi-thread-safe manner at the termination of a worker and is passed the pointer to global data.
+  `delete_local` can therefore safely access (and update) the content of `global_data` if needed (to gather results or statistics for instance).
+
+The local data of a worker (as returned by the `make_local` passed to `threadpool_set_worker_local_data_manager`) can be accessed inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) with :
+
+```c
+void *threadpoolworker_local_data (void)
+```
+
+#### Manage task data
+
+The data of a `job` is passed to a task when it is added to a thread pool with `threadpool_add_task`.
+
+See [Submit a task](#submit-a-task).
 
 ## Examples
 
@@ -410,7 +464,7 @@ $ make fuzzyword
 Two encapsulated thread pools are used : one to distribute the list of words on one monitored single thread (words are processed sequentially),
 each word being compared to the entries (distributed over the CPU threads) of the dictionary.
 
-It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe-task-post-processing) and `threadpool_set_resource_manager` for [global resource management](#7-manage-global-resources).
+It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe-task-post-processing) and `threadpool_set_global_resource_manager` for [global resource management](#manage-global-resources).
 
 ## Implementation insights
 

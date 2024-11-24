@@ -130,14 +130,17 @@ main ()
   struct gd gd = { (size_t) SIZE, ELEM_SIZE (base), threads_tags };
   size_t nb_workers = strlen (threads_tags);
   fprintf (stdout, _("%zu workers requested and processing...\n"), nb_workers);
-  struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd, tag, untag);    // Start 7 workers
-  threadpool_set_resource_manager (tp, res_alloc, res_dealloc);
+  struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd);        // Start 7 workers
+  threadpool_set_worker_local_data_manager (tp, tag, untag);
+  threadpool_set_global_resource_manager (tp, res_alloc, res_dealloc);
   threadpool_set_idle_timeout (tp, 1);
   threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0);
   size_t i = 0;
   size_t task_id;
   for (; i < ((size_t) TIMES) / 2; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
+  threadpool_set_worker_local_data_manager (tp, tag, untag);    // Ignored since workers are already running.
+  threadpool_set_global_resource_manager (tp, res_alloc, res_dealloc);  // Ignored since workers are already running.
   fprintf (stdout, _("Will go to sleep for %i seconds...\n"), TIMES / 6 + 1);
   sleep (TIMES / 6 + 1);
   fprintf (stdout, _("Stop sleeping after %i seconds.\n"), TIMES / 6 + 1);

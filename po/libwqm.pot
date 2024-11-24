@@ -7,7 +7,7 @@
 msgid   ""
 msgstr  "Project-Id-Version: libwqm\n"
         "Report-Msgid-Bugs-To: \n"
-        "POT-Creation-Date: 2024-11-23 20:30+0100\n"
+        "POT-Creation-Date: 2024-11-24 18:11+0100\n"
         "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
         "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
         "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -20,4 +20,7 @@ msgid   "Thread pool: (R) running, (I) idle, (S) stopped."
 msgstr  ""
 
 msgid   "Tasks      : (=) succeeded, (X) failed, (*) processing, (.) pending, (/) canceled."
+msgstr  ""
+
+msgid   "ignored."
 msgstr  ""

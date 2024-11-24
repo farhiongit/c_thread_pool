@@ -120,7 +120,7 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
   threadpool->monitor.displayer = new;
   threadpool->monitor.argument = a;
   if (new && !threadpool->monitor.processor)
-    threadpool->monitor.processor = threadpool_create_and_start (SEQUENTIAL, threadpool, 0, 0);
+    threadpool->monitor.processor = threadpool_create_and_start (SEQUENTIAL, threadpool);
   threadpool_monitor_call (threadpool);
   thrd_honored (mtx_unlock (&threadpool->mutex));
 }
@@ -129,8 +129,9 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
 #  define _(s) (s)
 #  define i18n_init
 #endif
+static once_flag I18N_INIT = ONCE_FLAG_INIT;
 static void
-threadpool_monitor_to_terminal_header (void)
+threadpool_i18n_init (void)
 {
   i18n_init;
 }
@@ -138,9 +139,7 @@ threadpool_monitor_to_terminal_header (void)
 void
 threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream)
 {
-  static volatile once_flag MONITOR_INIT = ONCE_FLAG_INIT;
-  call_once (&MONITOR_INIT, threadpool_monitor_to_terminal_header);
-
+  call_once (&I18N_INIT, threadpool_i18n_init);
   struct
   {
     size_t upper;
@@ -149,7 +148,7 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   {data.tasks.nb_pending, '.'}, {data.tasks.nb_canceled, '/'},
   //{data.workers.nb_idle, '~'},
   };
-  static volatile FILE *f = 0;
+  static FILE *f = 0;
   if (!f && !(f = FILE_stream))
     f = stderr;
   static volatile int legend = 0;       // The shared variable is declared volatile as it is used by several threads.
@@ -175,7 +174,7 @@ tss_threadpool_create (void)    // Called once.
 }
 
 struct threadpool *
-threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_local) (void), void (*delete_local) (void *local_data))
+threadpool_create_and_start (size_t nb_workers, void *global_data)
 {
   struct threadpool *threadpool = calloc (1, sizeof (*threadpool));     // All attributes are set to 0 (including pointers).
   if (!threadpool)
@@ -196,8 +195,8 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, void *(*make_
   thrd_honored (mtx_init (&threadpool->mutex, mtx_plain));
   thrd_honored (cnd_init (&threadpool->proceed_or_conclude_or_runoff));
   threadpool->global_data = global_data;
-  threadpool->worker_local_data.make = make_local;
-  threadpool->worker_local_data.destroy = delete_local;
+  threadpool->worker_local_data.make = 0;
+  threadpool->worker_local_data.destroy = 0;
   threadpool->in = threadpool->out = 0;
   threadpool->concluding = 0;
   threadpool->nb_running_workers = threadpool->nb_idle_workers = threadpool->nb_processing_tasks = threadpool->nb_succeeded_tasks =
@@ -299,7 +298,7 @@ thread_worker_runner (void *args)
       threadpool->running_worker_id[i] = 0;     // Unregister running worker.
       threadpool->nb_running_workers--;
       threadpool_monitor_call (threadpool);
-      if (threadpool->nb_running_workers == 0 && threadpool->resource.deallocator && threadpool->resource.data)
+      if (threadpool->nb_running_workers == 0 && threadpool->resource.deallocator)
       {
         threadpool->resource.deallocator (threadpool->resource.data);
         threadpool->resource.data = 0;
@@ -460,11 +459,15 @@ threadpool_set_idle_timeout (struct threadpool *threadpool, double delay)
 }
 
 void
-threadpool_set_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
+threadpool_set_global_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
   if (threadpool->nb_running_workers || threadpool->resource.data)
+  {
+    call_once (&I18N_INIT, threadpool_i18n_init);
+    fprintf (stderr, "%s: %s\n", __func__, _("ignored."));
     errno = ECANCELED;
+  }
   else
   {
     threadpool->resource.allocator = allocator;
@@ -481,4 +484,22 @@ threadpool_global_resource (void)
     return threadpool->resource.data;
   else
     return 0;
+}
+
+void
+threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data))
+{
+  thrd_honored (mtx_lock (&threadpool->mutex));
+  if (threadpool->nb_running_workers)
+  {
+    call_once (&I18N_INIT, threadpool_i18n_init);
+    fprintf (stderr, "%s: %s\n", __func__, _("ignored."));
+    errno = ECANCELED;
+  }
+  else
+  {
+    threadpool->worker_local_data.make = make_local;
+    threadpool->worker_local_data.destroy = delete_local;
+  }
+  thrd_honored (mtx_unlock (&threadpool->mutex));
 }
