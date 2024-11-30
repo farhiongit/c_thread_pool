@@ -16,7 +16,7 @@
                                                      !threadpool_something_to_process_predicate (threadpool) && \
                                                      (threadpool)->concluding ) // The FIFO is empty and there is not work in progress or new task that could ever fill it (all expected tasks have been processed).
 // N.B.: Once done, a FIFO cannot be undone by design: there aren't any data being processed left, that could call 'threadpool_add_task' and refill the empty FIFO (see loop in 'thread_worker_starter').
-#define threadpool_runoff_predicate(threadpool) (threadpool_is_done_predicate(threadpool) && (threadpool)->nb_running_workers == 0)
+#define threadpool_runoff_predicate(threadpool) (threadpool_is_done_predicate(threadpool) && (threadpool)->nb_active_workers == 0)
 
 #ifdef __GLIBC__
 size_t const NB_CPU = 0;
@@ -27,8 +27,8 @@ size_t const NEXT_TASK = SIZE_MAX - 1;
 size_t const LAST_TASK = SIZE_MAX;
 struct threadpool
 {
-  size_t max_nb_workers;
-  thrd_t *worker_id /* [max_nb_workers] */ ;
+  size_t requested_nb_workers, max_nb_workers;
+  thrd_t *worker_id /* [requested_nb_workers] */ ;
   mtx_t mutex;
   void *global_data;
   struct local_data             // Thread specific local data
@@ -37,8 +37,8 @@ struct threadpool
     void *(*make) (void);
     void (*destroy) (void *local_data);
   } worker_local_data;
-  size_t nb_running_workers, nb_idle_workers, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_pending_tasks, nb_submitted_tasks, nb_canceled_tasks;
-  thrd_t **running_worker_id /* [max_nb_workers] */ ;
+  size_t nb_active_workers, nb_idle_workers, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_pending_tasks, nb_submitted_tasks, nb_canceled_tasks;
+  thrd_t **active_worker_id /* [requested_nb_workers] */ ;
   struct elem                   // Elements in FIFO.
   {
     struct elem *next;
@@ -92,11 +92,13 @@ threadpool_monitor_call (struct threadpool *threadpool)
     if (p)
     {
       *p = (struct threadpool_monitor)
-      {.threadpool = threadpool,.workers = {.nb_max = threadpool->max_nb_workers,.nb_idle = threadpool->nb_idle_workers,},
-      .tasks = {.nb_submitted = threadpool->nb_submitted_tasks,
-                .nb_processing = threadpool->nb_processing_tasks,
-                .nb_succeeded = threadpool->nb_succeeded_tasks,.nb_failed = threadpool->nb_failed_tasks,
-                .nb_pending = threadpool->nb_pending_tasks,.nb_canceled = threadpool->nb_canceled_tasks,},
+      {.threadpool = threadpool,.closed = threadpool->concluding,
+        .workers = {.nb_requested = threadpool->requested_nb_workers,.nb_max = threadpool->max_nb_workers,
+                    .nb_idle = threadpool->nb_idle_workers,.nb_active = threadpool->nb_active_workers,},
+        .tasks = {.nb_submitted = threadpool->nb_submitted_tasks,
+                  .nb_processing = threadpool->nb_processing_tasks,
+                  .nb_succeeded = threadpool->nb_succeeded_tasks,.nb_failed = threadpool->nb_failed_tasks,
+                  .nb_pending = threadpool->nb_pending_tasks,.nb_canceled = threadpool->nb_canceled_tasks,},
       };
       struct timespec t;
       timespec_get (&t, TIME_UTC);      // C standard function, returns now.
@@ -184,10 +186,10 @@ threadpool_create_and_start (size_t nb_workers, void *global_data)
     if (!(nb_workers = (size_t) get_nprocs ()))
 #endif
       goto on_error;
-  threadpool->max_nb_workers = nb_workers;
-  if (!(threadpool->worker_id = malloc (threadpool->max_nb_workers * sizeof (*threadpool->worker_id))))
+  threadpool->requested_nb_workers = nb_workers;
+  if (!(threadpool->worker_id = malloc (threadpool->requested_nb_workers * sizeof (*threadpool->worker_id))))
     goto on_error;
-  if (!(threadpool->running_worker_id = calloc (threadpool->max_nb_workers, sizeof (*threadpool->running_worker_id))))  // All set to 0.
+  if (!(threadpool->active_worker_id = calloc (threadpool->requested_nb_workers, sizeof (*threadpool->active_worker_id))))      // All set to 0.
     goto on_error;
   if (tss_create
       (&threadpool->worker_local_data.reference, 0 /* The destructor of the thread-specific storage will be handled manually (see thread_worker_runner). */ ) != thrd_success)
@@ -199,7 +201,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data)
   threadpool->worker_local_data.destroy = 0;
   threadpool->in = threadpool->out = 0;
   threadpool->concluding = 0;
-  threadpool->nb_running_workers = threadpool->nb_idle_workers = threadpool->nb_processing_tasks = threadpool->nb_succeeded_tasks =
+  threadpool->max_nb_workers = threadpool->nb_active_workers = threadpool->nb_idle_workers = threadpool->nb_processing_tasks = threadpool->nb_succeeded_tasks =
     threadpool->nb_failed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = threadpool->nb_canceled_tasks = 0;
   threadpool->idle_timeout = 0.1;       // seconds.
   threadpool->resource.data = 0;
@@ -218,8 +220,8 @@ on_error:
   {
     if (threadpool->worker_id)
       free (threadpool->worker_id);
-    if (threadpool->running_worker_id)
-      free (threadpool->running_worker_id);
+    if (threadpool->active_worker_id)
+      free (threadpool->active_worker_id);
     free (threadpool);
   }
   return 0;
@@ -242,9 +244,9 @@ thread_worker_runner (void *args)
 {
   thrd_detach (thrd_current ());        // Asks for disposing of any resources allocated to the worker thread when it terminates.
   struct threadpool *threadpool = args;
-  thrd_honored (tss_set (TSS_THREADPOOL, threadpool));
+  thrd_honored (tss_set (TSS_THREADPOOL, threadpool));  // Could be conveniently replaced by a thread_local (C21) or _Thread_local struct threadpool * (says Jens Gustedt, https://stackoverflow.com/a/58087826)
   thrd_honored (mtx_lock (&threadpool->mutex));
-  thrd_honored (tss_set (threadpool->worker_local_data.reference, threadpool->worker_local_data.make ? threadpool->worker_local_data.make () : 0));     // Call to threadpool->worker_local_data.make is thread-safe.
+  thrd_honored (tss_set (threadpool->worker_local_data.reference, threadpool->worker_local_data.make ? threadpool->worker_local_data.make () : 0));     // Call to threadpool->worker_local_data.make is thread-safe. Could be conveniently replaced by a thread_local (C21) or _Thread_local void * since no destructors are used.
   while (1)                     // Looping on tasks (concurrently with other workers)
   {
     struct timespec timeout = timeout_instant (threadpool->idle_timeout);
@@ -292,13 +294,13 @@ thread_worker_runner (void *args)
     // The destructor of the thread-specific storage is called manually in a thread-safe manner
     // and before the thread is deallocated, allowing access to its global data in the user-defined function delete_local (with threadpool_global_data).
     threadpool->worker_local_data.destroy (localdata);
-  for (size_t i = 0; i < threadpool->max_nb_workers; i++)
-    if (threadpool->running_worker_id[i] && thrd_equal (thrd_current (), *threadpool->running_worker_id[i]))
+  for (size_t i = 0; i < threadpool->requested_nb_workers; i++)
+    if (threadpool->active_worker_id[i] && thrd_equal (thrd_current (), *threadpool->active_worker_id[i]))
     {
-      threadpool->running_worker_id[i] = 0;     // Unregister running worker.
-      threadpool->nb_running_workers--;
+      threadpool->active_worker_id[i] = 0;      // Unregister active worker.
+      threadpool->nb_active_workers--;
       threadpool_monitor_call (threadpool);
-      if (threadpool->nb_running_workers == 0 && threadpool->resource.deallocator)
+      if (threadpool->nb_active_workers == 0 && threadpool->resource.deallocator)
       {
         threadpool->resource.deallocator (threadpool->resource.data);
         threadpool->resource.data = 0;
@@ -338,24 +340,26 @@ threadpool_add_task (struct threadpool *threadpool, int (*work) (struct threadpo
   else
     threadpool->nb_canceled_tasks++;
   if (++threadpool->nb_submitted_tasks == ALL_TASKS)
-    threadpool->nb_submitted_tasks = 1;
+    threadpool->nb_submitted_tasks = 1; // Overflow. Wrap around.
   new_elem->task.id = threadpool->nb_submitted_tasks;   // task.id starts from 1.
   if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is idle and available:
     thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff));     // Signal it to wake one of the pending workers.
-  else if (threadpool->nb_running_workers < threadpool->max_nb_workers) // No worker are idle and available to process this new task at once:
-    for (size_t i = 0; i < threadpool->max_nb_workers; i++)     // Search for a non-running worker and start it.
-      if (!threadpool->running_worker_id[i] && thrd_create (&threadpool->worker_id[i], thread_worker_runner, threadpool) == thrd_success)       // Create a new worker.
+  else if (threadpool->nb_active_workers < threadpool->requested_nb_workers)    // No worker are idle and available to process this new task at once:
+    for (size_t i = 0; i < threadpool->requested_nb_workers; i++)       // Search for a non-running worker and start it.
+      if (!threadpool->active_worker_id[i] && thrd_create (&threadpool->worker_id[i], thread_worker_runner, threadpool) == thrd_success)        // Create a new worker.
       {
-        threadpool->running_worker_id[i] = &threadpool->worker_id[i];   // Register running worker.
+        threadpool->active_worker_id[i] = &threadpool->worker_id[i];    // Register active worker.
         // Note: a new worker thread has been created by thrd_create, but thread_worker_runner might not be launched right away.
-        // Anyway, the worker has to be taken into consideration by the predicate threadpool_runoff_predicate with threadpool->nb_running_workers++ to
+        // Anyway, the worker has to be taken into consideration by the predicate threadpool_runoff_predicate with threadpool->nb_active_workers++ to
         // let the thread pool know a new worker in on its way. This can not be deferred at the beginning of thread_worker_runner.
-        if (threadpool->nb_running_workers == 0 && threadpool->resource.allocator && !threadpool->resource.data)
+        if (threadpool->nb_active_workers == 0 && threadpool->resource.allocator && !threadpool->resource.data)
         {
           threadpool_monitor_call (threadpool);
           threadpool->resource.data = threadpool->resource.allocator (threadpool->global_data);
         }
-        threadpool->nb_running_workers++;
+        threadpool->nb_active_workers++;
+        if (threadpool->max_nb_workers < threadpool->nb_active_workers)
+          threadpool->max_nb_workers = threadpool->nb_active_workers;
         break;
       }
   threadpool_monitor_call (threadpool);
@@ -376,7 +380,7 @@ threadpool_wait_and_destroy (struct threadpool *threadpool)
 
   tss_delete (threadpool->worker_local_data.reference); // Does not invoke any destructors.
   free (threadpool->worker_id);
-  free (threadpool->running_worker_id);
+  free (threadpool->active_worker_id);
   mtx_destroy (&threadpool->mutex);
   cnd_destroy (&threadpool->proceed_or_conclude_or_runoff);
   if (threadpool->monitor.processor)
@@ -462,7 +466,7 @@ void
 threadpool_set_global_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource))
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
-  if (threadpool->nb_running_workers || threadpool->resource.data)
+  if (threadpool->nb_active_workers || threadpool->resource.data)
   {
     call_once (&I18N_INIT, threadpool_i18n_init);
     fprintf (stderr, "%s: %s\n", __func__, _("ignored."));
@@ -490,7 +494,7 @@ void
 threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data))
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
-  if (threadpool->nb_running_workers)
+  if (threadpool->nb_active_workers)
   {
     call_once (&I18N_INIT, threadpool_i18n_init);
     fprintf (stderr, "%s: %s\n", __func__, _("ignored."));

@@ -2,7 +2,7 @@ CFLAGS+=-O
 CFLAGS+=-fPIC
 
 .PHONY: all
-all: qsip_wc_test fuzzyword
+all: qsip_wc_test fuzzyword intensive
 
 .PHONY: qsip_wc_test
 qsip_wc_test: libs examples/qsip/qsip_wc_test
@@ -12,6 +12,10 @@ qsip_wc_test: libs examples/qsip/qsip_wc_test
 fuzzyword: libs examples/fuzzyword/fuzzyword
 	cd examples/fuzzyword ; LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../.. ./fuzzyword \
 	premir ministr constitutiotn arlmée républiqeu plaine pouvoit résrevé apanache finances dépenser contgaint paliatiff constitutionnaliseraint
+
+.PHONY: intensive
+intensive: libs examples/intensive/intensive
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:. ./examples/intensive/intensive
 
 examples/qsip/qsip_wc_test: LDFLAGS=-L.
 examples/qsip/qsip_wc_test: LDLIBS=-lwqm -lm
@@ -29,6 +33,11 @@ examples/fuzzyword/fuzzyword: CPPFLAGS+=-I.
 examples/fuzzyword/fuzzyword: LDFLAGS=-L.
 examples/fuzzyword/fuzzyword: LDLIBS=-lwqm -lm
 examples/fuzzyword/fuzzyword: examples/fuzzyword/fuzzyword.c
+
+examples/intensive/intensive: CPPFLAGS+=-I.
+examples/intensive/intensive: LDFLAGS=-L.
+examples/intensive/intensive: LDLIBS=-lwqm -lm
+examples/intensive/intensive: examples/intensive/intensive.c
 
 .PHONY: libs
 libs: libwqm.a libwqm.so

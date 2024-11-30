@@ -76,9 +76,10 @@ struct threadpool_monitor
 {
   const struct threadpool *threadpool;  // The monitored Thread pool.
   double time;                  // Elapsed seconds since thread pool creation.
+  int closed;
   struct
   {
-    size_t nb_max, nb_idle;
+    size_t nb_requested, nb_max, nb_idle, nb_active;
   } workers;                    // Monitoring workers.
   struct
   {

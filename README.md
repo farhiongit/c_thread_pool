@@ -107,11 +107,13 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers,
 
 A thread pool is declared and started with a call to `threadpool_create_and_start ()`.
 
-The first argument `nb_workers` is the number of required workers, that is the maximum number of tasks that can be executed in parallel by the system.
+The first argument `nb_workers` is the number of requested workers, that is the maximum number of tasks that should be executed in parallel by the system.
 - `NB_CPU` can be used as first argument to fit to the number of processors currently available in the system (as returned by `get_nprocs ()` with GNU C standard library).
 - `SEQUENTIAL` can be used as first argument to create a sequential thread pool: tasks will be executed asynchronously, one at a time, and in the order there were submitted. 
 
-The maximum number of workers can be defined higher than the number of CPUs as workers will be started only when solicited and will be released when unused after an idle time.
+The maximum number of workers can be defined to a higher value than the number of CPUs as workers will be started only when solicited and will be released when unused after an idle time.
+
+Nevertheless, the actual number of workers will be limited by the operating system to a lower value than `nb_workers`.
 
 ###### Options
 
@@ -268,11 +270,14 @@ It :
 The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
 
 - `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
-- `float time`: the elapsed seconds since the creation of the thread pool ;
-- `size_t workers.max_nb`: the maximum number of workers, as defined at the creation of the thread pool ;
+- `float time`: the elapsed seconds since the creation of the thread pool (`threadpool_create_and_start`) ;
+- `int closed` : 1 if the thread pool has been closed (by a call to `threadpool_wait_and_destroy`), 0 otherwise ;
+- `size_t workers.nb_requested`: the requested number of workers, as defined at the creation of the thread pool ;
+- `size_t workers.nb_max`: the maximum number of workers granted by the operating system (<= `workers.nb_requested`) ;
+- `size_t workers.nb_active`: the number of active worker, either running (`tasks.nb_processing`) or waiting (`workers.nb_idle`) ;
 - `size_t workers.nb_idle`: the number of idle worker, i.e. waiting (some time) for a task to process ;
 - `size_t tasks.nb_pending`: the number of tasks submitted to the thread pool and not yet processed or being processed ;
-- `size_t tasks.nb_processing`: the number of active workers, i.e. processing a task ;
+- `size_t tasks.nb_processing`: the number of running workers, i.e. processing a task ;
 - `size_t tasks.nb_succeeded`: the number of already processed and succeeded tasks by the thread pool
   (a task is considered successful when `work`, the function passed to `threadpool_add_task`, returns 0) ;
 - `size_t tasks.nb_failed`: the number of already processed and failed tasks by the thread pool
@@ -412,9 +417,15 @@ Two encapsulated thread pools are used : one to distribute 100 tasks over 7 moni
 
     - It uses features such as global data, worker local data, task cancellation, (fake) resource management and monitoring.
 
-Running this example yields:
+Running this example with
+
 ```
 $ make qsip_wc_test
+```
+
+yields:
+
+```
 Sorting 1,000,000 elements (multi-threaded quick sort in place), 100 times:
 Initializing 100,000,000 random numbers...
 7 workers requested and processing...
@@ -465,6 +476,17 @@ Two encapsulated thread pools are used : one to distribute the list of words on 
 each word being compared to the entries (distributed over the CPU threads) of the dictionary.
 
 It uses `job_delete` as a callback function for [task post-processing](#multi-thread-safe-task-post-processing) and `threadpool_set_global_resource_manager` for [global resource management](#manage-global-resources).
+
+### Intensive
+
+This example requests more workers than what the system permits.
+
+Run it with:
+
+```
+$ make intensive
+```
+
 
 ## Implementation insights
 
