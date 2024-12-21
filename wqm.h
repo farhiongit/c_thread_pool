@@ -5,6 +5,7 @@
 #  define __THREADPOOL_H__
 #  include <stddef.h>           // for size_t
 #  include <stdio.h>            // for __GLIBC__
+#  include <stdint.h>
 
 struct threadpool;              // Abstract data type : opaque record of a thread pool
 
@@ -18,7 +19,6 @@ extern const size_t NB_CPU;
 extern const size_t SEQUENTIAL;
 struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data);
 
-// ** Options for 'threadpool_create_and_start' **
 // Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);
 
@@ -53,11 +53,11 @@ void threadpool_wait_and_destroy (struct threadpool *threadpool);
 
 // Manage local data or workers.
 // make_local will be called when a worker is created and delete_local when it is terminated.
+// Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialization.
+// Call to 'delete_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker termination.
 void threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data));
 
 // Workers local data constructed by 'make_local' and destroyed by 'delete_local' will be (MT-safely) accessible to worker through a call to 'threadpool_worker_local_data'.
-// Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialization.
-// Call to 'delete_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker termination.
 // 'delete_local' is passed, as first argument, a value previously returned by 'make_local'.
 void *threadpool_worker_local_data (void);
 
@@ -65,7 +65,7 @@ void *threadpool_worker_local_data (void);
 void threadpool_set_idle_timeout (struct threadpool *threadpool, double delay);
 
 // Manage global resources for all tasks.
-// allocator will be called before the first tasks is processed, deallocator after the last tasks has been processed.
+// allocator will be called before the first task is processed, deallocator after the last tasks has been processed.
 // Resources will be deallocated and reallocated automatically after idle timeout.
 void threadpool_set_global_resource_manager (struct threadpool *threadpool, void *(*allocator) (void *global_data), void (*deallocator) (void *resource));
 
@@ -79,18 +79,24 @@ struct threadpool_monitor
   int closed;
   struct
   {
-    size_t nb_requested, nb_max, nb_idle, nb_active;
+    size_t nb_requested, nb_max, nb_idle, nb_alive;
   } workers;                    // Monitoring workers.
   struct
   {
-    size_t nb_submitted, nb_pending, nb_processing, nb_succeeded, nb_failed, nb_canceled;
+    size_t nb_submitted, nb_pending, nb_asynchronous, nb_processing, nb_succeeded, nb_failed, nb_canceled;
   } tasks;                      // Monitoring tasks.
 };
 typedef void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg);
 // Set monitor handler.
 // Monitor handler will be called asynchronously (without interfering with the execution of workers) and executed thread-safely and not after `threadpool_wait_and_destroy` has been called.
-void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler displayer, void *arg);
+void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler displayer, void *arg, int (*filter) (struct threadpool_monitor d));
 
 // A monitor handler to FILE stream.
 void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream);
+
+// Virtual tasks (calling asynchronous jobs).
+// Declare the task continuation and the time out, in seconds. Returns the UID of the continuator.
+uint64_t threadpool_task_continuation (int (*work) (struct threadpool * threadpool, void *data), double seconds);
+// Call the task continuation. Returns EXIT_SUCCESS if the continuator UID was previously declared and has not timed out, EXIT_FAILURE (with errno set to ETIMEDOUT) otherwise.
+int threadpool_task_continue (uint64_t uid);
 #endif

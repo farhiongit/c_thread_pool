@@ -134,7 +134,7 @@ main ()
   threadpool_set_worker_local_data_manager (tp, tag, untag);
   threadpool_set_global_resource_manager (tp, res_alloc, res_dealloc);
   threadpool_set_idle_timeout (tp, 1);
-  threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0);
+  threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0, 0);
   size_t i = 0;
   size_t task_id;
   for (; i < ((size_t) TIMES) / 2; i++)
@@ -147,19 +147,22 @@ main ()
   for (; i < (size_t) TIMES; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (1);
-  fprintf (stdout, _("Canceling one task.\n"));
+  fprintf (stdout, _("Canceling the last submitted task (twice).\n"));
   threadpool_cancel_task (tp, task_id);
   threadpool_cancel_task (tp, task_id);
+  fprintf (stdout, _("Add and cancel void task (twice).\n"));
+  threadpool_add_task (tp, 0, 0, 0);
+  threadpool_add_task (tp, 0, malloc (1), free);
   sleep (1);
-  fprintf (stdout, _("Canceling two tasks.\n"));
+  fprintf (stdout, _("Canceling two tasks (last submitted and pending).\n"));
   threadpool_cancel_task (tp, LAST_TASK);
   threadpool_cancel_task (tp, LAST_TASK);
   sleep (1);
-  fprintf (stdout, _("Canceling two tasks.\n"));
+  fprintf (stdout, _("Canceling two tasks (first submitted and pending).\n"));
   threadpool_cancel_task (tp, NEXT_TASK);
   threadpool_cancel_task (tp, NEXT_TASK);
   sleep (1);
-  fprintf (stdout, _("Canceling all tasks.\n"));
+  fprintf (stdout, _("Canceling all pending tasks.\n"));
   threadpool_cancel_task (tp, ALL_TASKS);
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, _("Done.\n"));

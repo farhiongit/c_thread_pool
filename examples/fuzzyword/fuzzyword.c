@@ -260,7 +260,7 @@ main (int argc, char *argv[])
   struct tp1_global tp1_global = { "liste.de.mots.francais.frgut.txt" };
   struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global);
   threadpool_set_global_resource_manager (tp1, tp1_res_alloc, tp1_res_dealloc);
-  threadpool_set_monitor (tp1, threadpool_monitor_to_terminal, stderr);
+  threadpool_set_monitor (tp1, threadpool_monitor_to_terminal, stderr, 0);
   fprintf (stderr, "Searching for matching words...\n");
   for (int iarg = 1; iarg < argc; iarg++)
   {

@@ -1,21 +1,36 @@
 CFLAGS+=-O
+#CFLAGS+=-ggdb
 CFLAGS+=-fPIC
+#VALGRIND=valgrind --leak-check=full
 
 .PHONY: all
-all: qsip_wc_test fuzzyword intensive
+run_examples: qsip_wc_test fuzzyword intensive timers
 
+#### Examples
 .PHONY: qsip_wc_test
 qsip_wc_test: libs examples/qsip/qsip_wc_test
-	cd examples/qsip ; LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../.. ./qsip_wc_test
+	@echo "********* $@ ************"
+	cd examples/qsip ; LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../.. $(VALGRIND) ./qsip_wc_test
+	@echo "*********************"
 
 .PHONY: fuzzyword
 fuzzyword: libs examples/fuzzyword/fuzzyword
+	@echo "********* $@ ************"
 	cd examples/fuzzyword ; LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../.. ./fuzzyword \
 	premir ministr constitutiotn arlmée républiqeu plaine pouvoit résrevé apanache finances dépenser contgaint paliatiff constitutionnaliseraint
+	@echo "*********************"
 
 .PHONY: intensive
 intensive: libs examples/intensive/intensive
+	@echo "********* $@ ************"
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:. ./examples/intensive/intensive
+	@echo "*********************"
+
+.PHONY: timers
+timers: libs examples/timers/timers
+	@echo "********* $@ ************"
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:. ./examples/timers/timers
+	@echo "*********************"
 
 examples/qsip/qsip_wc_test: LDFLAGS=-L.
 examples/qsip/qsip_wc_test: LDLIBS=-lwqm -lm
@@ -39,6 +54,16 @@ examples/intensive/intensive: LDFLAGS=-L.
 examples/intensive/intensive: LDLIBS=-lwqm -lm
 examples/intensive/intensive: examples/intensive/intensive.c
 
+examples/timers/timers: CPPFLAGS+=-I.
+examples/timers/timers: LDFLAGS=-L.
+examples/timers/timers: LDLIBS=-lwqm -lm -lrt
+examples/timers/timers: examples/timers/timers.c
+
+#### Libraries
+.PHONY: callgraph
+callgraph:
+	@cflow -fposix -n --main threadpool_create_and_start --main threadpool_add_task --main threadpool_cancel_task --main threadpool_wait_and_destroy --main threadpool_task_continuation --main threadpool_task_continue wqm.c | grep -v '<>'
+
 .PHONY: libs
 libs: libwqm.a libwqm.so
 
@@ -47,34 +72,37 @@ libwqm.a:
 libwqm.so:
 
 wqm.o: CFLAGS+=-std=c11  #C11 compliant
-# Prepare for gettext (uncomment)
+# Uncomment to prepare for gettext
 #wqm.o: CPPFLAGS+=-I/usr/share/gettext -include gettext.h -DENABLE_NLS=1
 #wqm.o: CPPFLAGS+=-DPACKAGE="\"libwqm\"" -DLOCALEDIR="\"${PWD}\"" -D"_(s)"="dgettext(PACKAGE,s)" -Di18n_init="do{bindtextdomain(PACKAGE,LOCALEDIR);}while(0)"
 wqm.o: wqm.c wqm.h
 
 lib%.so: LDFLAGS+=-shared
 lib%.so: %.o
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) -o "$@" "$^"
 
 lib%.a: ARFLAGS=rcs
 lib%.a: %.o
-	$(AR) $(ARFLAGS) $@ $^
-	@nm -A -g --defined-only $@
+	rm -f -- "$@"
+	$(AR) $(ARFLAGS) -- "$@" "$^"
+	@nm -A -g --defined-only -- "$@"
 
-# Prepare for gettext
+#### Internationalization
+# Prepare for gettext (with make fr/LC_MESSAGES/libwqm.mo for instance)
 %/LC_MESSAGES/libwqm.mo: po/%.po
 	mkdir -p "$(dir $@)"
-	msgfmt --output-file=$@ $^
+	msgfmt --output-file="$@" -- "$^"
 
 po/fr.po: po/libwqm.pot
 	mkdir -p "$(dir $@)"
-	[ ! -f $@ ] || msgmerge -U -N --lang=fr -i --no-location --no-wrap $@ $^
-	[ -f $@ ] || msginit --no-translator -l fr --no-wrap -i $^ -o $@
+	[ ! -f "$@" ] || msgmerge -U -N --lang=fr -i --no-location --no-wrap -- "$@" "$^"
+	[ -f "$@" ] || msginit --no-translator -l fr --no-wrap -i "$^" -o "$@"
 
 po/libwqm.pot: wqm.c
 	mkdir -p "$(dir $@)"
-	xgettext -o $@ -LC -k_ -i --package-name=libwqm --no-wrap --no-location $^
+	xgettext -o "$@" -LC -k_ -i --package-name=libwqm --no-wrap --no-location -- "$^"
 
+#### README to html
 README.html: README.md
-	pandoc -f markdown $^ > $@
+	pandoc -f markdown -- "$^" > "$@"
 

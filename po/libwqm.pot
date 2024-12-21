@@ -7,7 +7,7 @@
 msgid   ""
 msgstr  "Project-Id-Version: libwqm\n"
         "Report-Msgid-Bugs-To: \n"
-        "POT-Creation-Date: 2024-11-24 18:11+0100\n"
+        "POT-Creation-Date: 2024-12-21 00:27+0100\n"
         "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
         "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
         "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,11 +16,20 @@ msgstr  "Project-Id-Version: libwqm\n"
         "Content-Type: text/plain; charset=CHARSET\n"
         "Content-Transfer-Encoding: 8bit\n"
 
-msgid   "Thread pool: (R) running, (I) idle, (S) stopped."
+msgid   "Operation not permitted."
 msgstr  ""
 
-msgid   "Tasks      : (=) succeeded, (X) failed, (*) processing, (.) pending, (/) canceled."
+msgid   "Invalid argument."
 msgstr  ""
 
-msgid   "ignored."
+msgid   "Out of memory."
+msgstr  ""
+
+msgid   "[Thread pool UID][Elapsed seconds][Thread pool state (Nb alive workers/Nb allocated workers)][Nb submitted tasks] Tasks..."
+msgstr  ""
+
+msgid   "Thread pool states: (R) running, (I) idle, (S) stopped."
+msgstr  ""
+
+msgid   "Tasks             : (=) succeeded, (X) failed, (?) asynchronous, (*) processing, (.) pending, (/) canceled."
 msgstr  ""
