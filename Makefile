@@ -3,8 +3,12 @@ CFLAGS+=-O
 CFLAGS+=-fPIC
 #VALGRIND=valgrind --leak-check=full
 
-.PHONY: all
+.PHONY: run_examples
 run_examples: qsip_wc_test fuzzyword intensive timers
+
+.PHONY: help
+help:
+	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, README.html, <language>/LC_MESSAGES/libwqm.mo"
 
 #### Examples
 .PHONY: qsip_wc_test
