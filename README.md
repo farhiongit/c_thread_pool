@@ -262,7 +262,7 @@ It then waits for all the tasks to be completed by workers.
 
 A monitoring of the thread pool activity can optionally be activated by calling
 ```c
-void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler handler, void *arg)
+void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler handler, void *arg, threadpool_monitor_filter filter)
 ```
 
 A user-defined `handler` function is passed as second argument, with signature
@@ -270,19 +270,24 @@ A user-defined `handler` function is passed as second argument, with signature
 void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg)
 ```
 
-This handler will be called to retrieve and display information about the activity of the tread pool.
+`0` or a user-defined `filter` function can be passed as fourth argument, with signature
+```c
+int (*threadpool_monitor_filter) (struct threadpool_monitor d)
+```
+
+The `handler` will be called to retrieve and display information about the activity of the thread pool.
 It :
 
-- will be called whenever the state of the thread pool changes,
-- will be passed the argument `arg` previously passed to `threadpool_set_monitor` as third (be it not null) argument,
-- will be called asynchronously, without interfering with the execution of workers (actually, a sequential dedicated thread pool is used),
+- will be called whenever the state of the thread pool changes and, if `filter` is not null, whenever `filter` returns non-zero. `filter` should be set to 0 to monitor every change of the thread pool state.
+- will be passed the argument `arg` (which can be `0`) previously passed to `threadpool_set_monitor` as thirdargument,
+- will be called asynchronously, without interfering with the execution of workers (actually, a sequential dedicated asynchronous thread pool is used for monitoring),
 - will be executed multi-thread-safely,
-- will not be called after `threadpool_wait_and_destroy` has been called.
+- should not be called after `threadpool_wait_and_destroy` has been called.
 
 The monitoring data are passed to the handler function in a structure `threadpool_monitor` which contains:
 
 - `struct threadpool *threadpool`: the thread pool for which the monitoring handler is called ;
-- `float time`: the elapsed seconds since the creation of the thread pool (`threadpool_create_and_start`) ;
+- `double time`: the elapsed seconds since the creation of the thread pool (`threadpool_create_and_start`) ;
 - `int closed` : 1 if the thread pool has been closed (by a call to `threadpool_wait_and_destroy`), 0 otherwise ;
 - `size_t workers.nb_requested`: the requested number of workers, as defined at the creation of the thread pool ;
 - `size_t workers.nb_max`: the maximum number of workers granted by the operating system (<= `workers.nb_requested`) ;
@@ -300,9 +305,14 @@ The monitoring data are passed to the handler function in a structure `threadpoo
 
 A handler `threadpool_monitor_to_terminal` is available for convenience:
 
-- It can be passed as the second argument of `threadpool_set_monitor`.
+- It can be used as the second argument of `threadpool_set_monitor`.
 - It displays monitoring data as text sent to a stream of type `FILE *`, passed as the third argument of `threadpool_set_monitor`.
   `stderr` will be used by default if this third argument is `NULL`.
+
+A filter `threadpool_monitor_every_100ms` is available for convenience:
+
+- It can be used as the fourth argument of `threadpool_set_monitor`.
+- It permits to monitor not more often than every 100 ms.
 
 ### Manage data
 

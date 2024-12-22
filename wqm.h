@@ -91,8 +91,10 @@ typedef void (*threadpool_monitor_handler) (struct threadpool_monitor, void *arg
 // Monitor handler will be called asynchronously (without interfering with the execution of workers) and executed thread-safely and not after `threadpool_wait_and_destroy` has been called.
 void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler displayer, void *arg, int (*filter) (struct threadpool_monitor d));
 
-// A monitor handler to FILE stream.
+// A convenient monitor handler to monitor text to FILE stream.
 void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream);
+// A convenient filter to monitor at most every 100 ms.
+int threadpool_monitor_every_100ms (struct threadpool_monitor d);
 
 // Virtual tasks (calling asynchronous jobs).
 // Declare the task continuation and the time out, in seconds. Returns the UID of the continuator.

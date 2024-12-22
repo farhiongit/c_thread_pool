@@ -134,7 +134,7 @@ main ()
   threadpool_set_worker_local_data_manager (tp, tag, untag);
   threadpool_set_global_resource_manager (tp, res_alloc, res_dealloc);
   threadpool_set_idle_timeout (tp, 1);
-  threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0, 0);
+  threadpool_set_monitor (tp, threadpool_monitor_to_terminal, 0, threadpool_monitor_every_100ms);
   size_t i = 0;
   size_t task_id;
   for (; i < ((size_t) TIMES) / 2; i++)

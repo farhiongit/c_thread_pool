@@ -11,7 +11,7 @@
 void timer_set (double seconds, int (*callback) (void *arg), void *arg);        // See below.
 
 #define MAXDELAY (2)
-#define NB_TIMERS (10000)
+#define NB_TIMERS (30000)
 //#define SIGTIMER SIGUSR1
 #define THREADTIMER
 
@@ -115,12 +115,6 @@ pause (struct threadpool * /* tp */ , void *arg)
   return EXIT_SUCCESS;
 }
 
-static int
-monitor_start_and_stop (struct threadpool_monitor d)
-{
-  return (d.workers.nb_alive == 0);
-}
-
 static void
 monitor_handler (struct threadpool_monitor d, void *)
 {
@@ -135,7 +129,7 @@ main (void)
   getrlimit (SIGPENDING);       // the number of timers is limited by the RLIMIT_SIGPENDING
   fprintf (stdout, "Running %d virtual tasks (asynchronous timers of at most %g seconds) on a single worker.\n", NB_TIMERS, 1. * MAXDELAY);
   struct threadpool *tp = threadpool_create_and_start (SEQUENTIAL, 0);
-  threadpool_set_monitor (tp, monitor_handler, 0, monitor_start_and_stop);
+  threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
   for (size_t i = 0; i < NB_TIMERS; i++)
     threadpool_add_task (tp, pause, job_create (1. * MAXDELAY * rand () / RAND_MAX), job_delete);
   threadpool_wait_and_destroy (tp);
@@ -184,14 +178,14 @@ timers_loop (void *)
     if (head)
     {
       struct timespec timeout = head->timeout;
-      if (cnd_timedwait (&Timers_condition, &Timers_mutex, &timeout) != thrd_timedout)
+      if (cnd_timedwait (&Timers_condition, &Timers_mutex, &timeout) != thrd_timedout || head != Timers_head)   // Timers_head could have changed while waiting.
         continue /* loop */ ;
       if (head->callback)
         head->callback (Timers_head->arg);
       Timers_head = Timers_head->next;
       free (head);
     }
-    else
+    else                        // if (!head)
       cnd_wait (&Timers_condition, &Timers_mutex);
   }
   mtx_unlock (&Timers_mutex);

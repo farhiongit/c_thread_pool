@@ -87,6 +87,7 @@ struct threadpool
     void *argument;
     struct threadpool *processor;
     struct timespec t0;
+    double last_time;
     int (*filter) (struct threadpool_monitor d);
   } monitor;
 };
@@ -289,7 +290,7 @@ threadpool_task_continue (uint64_t uid)
 static int
 threadpool_monitor_exec (struct threadpool *, void *data)
 {
-  const struct threadpool *threadpool = ((struct threadpool_monitor *) data)->threadpool;       //threadpool_global_data ();
+  const struct threadpool *threadpool = ((struct threadpool_monitor *) data)->threadpool;
   if (threadpool->monitor.displayer)
     threadpool->monitor.displayer (*(struct threadpool_monitor *) data, threadpool->monitor.argument);
   return 0;
@@ -308,22 +309,22 @@ threadpool_monitor_call (struct threadpool *threadpool)
                 .nb_succeeded = threadpool->nb_succeeded_tasks,.nb_failed = threadpool->nb_failed_tasks,
                 .nb_pending = threadpool->nb_pending_tasks,.nb_canceled = threadpool->nb_canceled_tasks,},
     };
+    struct timespec t;
+    timespec_get (&t, TIME_UTC);        // C standard function, returns now.
+    if (t.tv_nsec < threadpool->monitor.t0.tv_nsec)
+    {
+      t.tv_sec--;               // -1s
+      t.tv_nsec += 1000 * 1000 * 1000;  // +1s
+    }
+    t.tv_sec -= threadpool->monitor.t0.tv_sec;
+    t.tv_nsec -= threadpool->monitor.t0.tv_nsec;
+    v.time = (double) t.tv_sec + (double) t.tv_nsec / 1e9;
     if (threadpool->monitor.filter && !threadpool->monitor.filter (v))
       return;
     struct threadpool_monitor *p = malloc (sizeof (*p));
     if (p)
     {
       *p = v;
-      struct timespec t;
-      timespec_get (&t, TIME_UTC);      // C standard function, returns now.
-      if (t.tv_nsec < threadpool->monitor.t0.tv_nsec)
-      {
-        t.tv_sec--;             // -1s
-        t.tv_nsec += 1000 * 1000 * 1000;        // +1s
-      }
-      t.tv_sec -= threadpool->monitor.t0.tv_sec;
-      t.tv_nsec -= threadpool->monitor.t0.tv_nsec;
-      p->time = (double) t.tv_sec + (double) t.tv_nsec / 1e9;
       threadpool_add_task (threadpool->monitor.processor, threadpool_monitor_exec, p, free);    // p will be free'd at task termination (see note (*)) by a call to free.
     }
   }
@@ -337,7 +338,7 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
   threadpool->monitor.argument = a;
   threadpool->monitor.filter = filter;
   if (new && !threadpool->monitor.processor)
-    threadpool->monitor.processor = threadpool_create_and_start (SEQUENTIAL, threadpool);
+    threadpool->monitor.processor = threadpool_create_and_start (SEQUENTIAL, &threadpool->monitor.last_time);
   threadpool_monitor_call (threadpool);
   thrd_honored (mtx_unlock (&threadpool->mutex));
 }
@@ -381,6 +382,20 @@ threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_strea
   fflush (f);
 }
 
+int
+threadpool_monitor_every_100ms (struct threadpool_monitor d)
+{
+  static const double ms = 100; // 100 ms
+  double *last_time = d.threadpool->monitor.processor->global_data;
+  assert (last_time);
+  if (d.workers.nb_alive == 0 || d.time > *last_time + ms / 1000.)
+  {
+    *last_time = d.time;
+    return 1;
+  }
+  return 0;
+}
+
 // ================= Worker crew =================
 static void
 threadpool_init (void)          // Called once.
@@ -422,6 +437,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data)
   threadpool->monitor.displayer = 0;
   threadpool->monitor.argument = 0;
   threadpool->monitor.processor = 0;
+  threadpool->monitor.last_time = 0;
   timespec_get (&threadpool->monitor.t0, TIME_UTC);     // C standard function, returns now.
   return threadpool;
 
