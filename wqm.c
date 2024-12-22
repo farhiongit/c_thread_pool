@@ -288,8 +288,9 @@ threadpool_task_continue (uint64_t uid)
 
 // ================= Monitoring =================
 static int
-threadpool_monitor_exec (struct threadpool *, void *data)
+threadpool_monitor_exec (struct threadpool *monitor, void *data)
 {
+  (void) monitor;
   const struct threadpool *threadpool = ((struct threadpool_monitor *) data)->threadpool;
   if (threadpool->monitor.displayer)
     threadpool->monitor.displayer (*(struct threadpool_monitor *) data, threadpool->monitor.argument);
