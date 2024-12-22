@@ -1,3 +1,4 @@
+CFLAGS=
 CFLAGS+=-O
 #CFLAGS+=-ggdb
 CFLAGS+=-fPIC

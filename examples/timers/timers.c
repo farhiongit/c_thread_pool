@@ -10,10 +10,11 @@
 #include "wqm.h"
 void timer_set (double seconds, int (*callback) (void *arg), void *arg);        // See below.
 
-#define MAXDELAY (2)
 #define NB_TIMERS (30000)
-//#define SIGTIMER SIGUSR1
-#define THREADTIMER
+#define MAXDELAY (2)
+#define TIMEOUT (0.9 * (MAXDELAY))      // Timeout (seconds), shorten a little bit, for the purpose of the example.
+//#define SIGTIMER SIGUSR1        // POSIX signal based timer. Seems to be limited by the OS.
+#define THREADTIMER             // POSIX thread based timer.
 
 struct job
 {
@@ -105,7 +106,7 @@ static int
 pause (struct threadpool * /* tp */ , void *arg)
 {
   struct job *timer = arg;
-  assert ((timer->uid = threadpool_task_continuation (resume, .9 * MAXDELAY))); // Timeout (seconds), shorten a little bit.
+  assert ((timer->uid = threadpool_task_continuation (resume, TIMEOUT)));
 #if defined (SIGTIMER) || defined (THREADTIMER)
   assert (timer_settime (timer->timerid, 0, &timer->itimerspec, 0) == 0);
 #else
@@ -127,7 +128,7 @@ main (void)
 {
 #define getrlimit(resource) do { struct rlimit resource; getrlimit (RLIMIT_##resource, &resource); fprintf (stdout, "getrlimit (" #resource ") = %'jd\n", (intmax_t) resource.rlim_cur); } while (0)
   getrlimit (SIGPENDING);       // the number of timers is limited by the RLIMIT_SIGPENDING
-  fprintf (stdout, "Running %d virtual tasks (asynchronous timers of at most %g seconds) on a single worker.\n", NB_TIMERS, 1. * MAXDELAY);
+  fprintf (stdout, "Running %d virtual tasks (asynchronous timers of at most %g seconds) on a single worker (timeout %g s).\n", NB_TIMERS, 1. * MAXDELAY, 1. * TIMEOUT);
   struct threadpool *tp = threadpool_create_and_start (SEQUENTIAL, 0);
   threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
   for (size_t i = 0; i < NB_TIMERS; i++)
@@ -172,7 +173,7 @@ static int
 timers_loop (void *)
 {
   mtx_lock (&Timers_mutex);
-  while (1)
+  while (1)                     // Infinite loop
   {
     struct timer_elem *head = Timers_head;
     if (head)
@@ -196,7 +197,9 @@ timers_loop (void *)
 static void
 timers_init (void)
 {
-  thrd_create (&Timers_thread, timers_loop, 0);
+  thrd_create (&Timers_thread, timers_loop, 0); // Won't be detroyed
+  mtx_init (&Timers_mutex, mtx_plain);  // Won't be detroyed
+  cnd_init (&Timers_condition); // Won't be detroyed
 }
 
 void
@@ -210,7 +213,7 @@ timer_set (double seconds, int (*callback) (void *arg), void *arg)
 
   if (!Timers_head)
     Timers_head = new;
-  else if (timespec_cmp (new->timeout, Timers_head->timeout) < 0)
+  else if (timespec_cmp (new->timeout, Timers_head->timeout) <= 0)
   {
     new->next = Timers_head;
     Timers_head = new;
@@ -218,15 +221,10 @@ timer_set (double seconds, int (*callback) (void *arg), void *arg)
   else
   {
     struct timer_elem *prev;
-    for (prev = Timers_head; prev->next; prev = prev->next)
-      if (timespec_cmp (new->timeout, prev->next->timeout) < 0)
-      {
-        new->next = prev->next;
-        prev->next = new;
-        break;
-      }
-    if (!prev->next)
-      prev->next = new;
+    for (prev = Timers_head; prev->next && timespec_cmp (new->timeout, prev->next->timeout) > 0; prev = prev->next)
+      /* nothing */ ;
+    new->next = prev->next;
+    prev->next = new;
   }
   cnd_signal (&Timers_condition);
   mtx_unlock (&Timers_mutex);
