@@ -42,23 +42,28 @@ examples/qsip/qsip_wc_test: LDLIBS=-lwqm -lm
 examples/qsip/qsip_wc_test: examples/qsip/qsip_wc_test.o examples/qsip/qsip_wc.o
 
 #examples/qsip/qsip_wc_test.o: CPPFLAGS+=-DSIZE=100 -DTIMES=10    # for valgrind or gdb
+examples/qsip/qsip_wc_test.o: CFLAGS+=-std=c23
 examples/qsip/qsip_wc_test.o: CPPFLAGS+=-I.
 examples/qsip/qsip_wc_test.o: examples/qsip/qsip_wc_test.c
 
+examples/qsip/qsip_wc.o: CFLAGS+=-std=c23
 examples/qsip/qsip_wc.o: CPPFLAGS+=-I.
 examples/qsip/qsip_wc.o: examples/qsip/qsip_wc.c examples/qsip/qsip_wc.h
 
+examples/fuzzyword/fuzzyword: CFLAGS+=-std=c23
 examples/fuzzyword/fuzzyword: CPPFLAGS+=-DCOLLATE
 examples/fuzzyword/fuzzyword: CPPFLAGS+=-I.
 examples/fuzzyword/fuzzyword: LDFLAGS=-L.
 examples/fuzzyword/fuzzyword: LDLIBS=-lwqm -lm
 examples/fuzzyword/fuzzyword: examples/fuzzyword/fuzzyword.c
 
+examples/intensive/intensive: CFLAGS+=-std=c23
 examples/intensive/intensive: CPPFLAGS+=-I.
 examples/intensive/intensive: LDFLAGS=-L.
 examples/intensive/intensive: LDLIBS=-lwqm -lm
 examples/intensive/intensive: examples/intensive/intensive.c
 
+examples/timers/timers: CFLAGS+=-std=c23
 examples/timers/timers: CPPFLAGS+=-I.
 examples/timers/timers: LDFLAGS=-L.
 examples/timers/timers: LDLIBS=-lwqm -lm -lrt

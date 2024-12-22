@@ -200,7 +200,7 @@ tp1_job_free (void *arg)
 static const wchar_t *
 get_match (wchar_t *wa, size_t nb_lines, const wchar_t (*const lines)[100], wchar_t *const *const colllines)
 {
-  size_t start = ((size_t) random ()) % nb_lines;
+  size_t start = ((size_t) rand ()) % nb_lines;
   struct tp2_global tp2_global = {.match = 0,.dmatch = ULONG_MAX };
   for (size_t i = 0; !tp2_global.match && i < nb_lines; i++)
     if (!wcscmp (wa, lines[(i + start) % nb_lines]))    // To avoid false-sharing.

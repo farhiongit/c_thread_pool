@@ -28,25 +28,26 @@ Create a static and dynamic library using :
 $ make libs
 cc -O -fPIC   -c -o wqm.o wqm.c
 ar rcs libwqm.a wqm.o
-libwqm.a:wqm.o:00000000000001e0 R ALL_TASKS
-libwqm.a:wqm.o:00000000000001d0 R LAST_TASK
-libwqm.a:wqm.o:00000000000001f0 R NB_CPU
-libwqm.a:wqm.o:00000000000001d8 R NEXT_TASK
-libwqm.a:wqm.o:00000000000001e8 R SEQUENTIAL
-libwqm.a:wqm.o:0000000000000cf8 T threadpool_add_task
-libwqm.a:wqm.o:0000000000001efd T threadpool_cancel_task
-libwqm.a:wqm.o:0000000000000a06 T threadpool_create_and_start
-libwqm.a:wqm.o:0000000000001e5f T threadpool_global_data
-libwqm.a:wqm.o:00000000000022e8 T threadpool_global_resource
-libwqm.a:wqm.o:000000000000079b T threadpool_monitor_to_terminal
-libwqm.a:wqm.o:00000000000021a3 T threadpool_set_global_resource_manager
-libwqm.a:wqm.o:00000000000020b4 T threadpool_set_idle_timeout
-libwqm.a:wqm.o:0000000000001363 T threadpool_set_monitor
-libwqm.a:wqm.o:0000000000002314 T threadpool_set_worker_local_data_manager
-libwqm.a:wqm.o:0000000000000533 T threadpool_task_continuation
-libwqm.a:wqm.o:000000000000122b T threadpool_task_continue
-libwqm.a:wqm.o:0000000000001472 T threadpool_wait_and_destroy
-libwqm.a:wqm.o:00000000000016be T threadpool_worker_local_data
+libwqm.a:wqm.o:0000000000000200 R ALL_TASKS
+libwqm.a:wqm.o:00000000000001f0 R LAST_TASK
+libwqm.a:wqm.o:0000000000000210 R NB_CPU
+libwqm.a:wqm.o:00000000000001f8 R NEXT_TASK
+libwqm.a:wqm.o:0000000000000208 R SEQUENTIAL
+libwqm.a:wqm.o:0000000000000eac T threadpool_add_task
+libwqm.a:wqm.o:00000000000022ff T threadpool_cancel_task
+libwqm.a:wqm.o:0000000000000baf T threadpool_create_and_start
+libwqm.a:wqm.o:00000000000022d6 T threadpool_global_data
+libwqm.a:wqm.o:0000000000002773 T threadpool_global_resource
+libwqm.a:wqm.o:0000000000000b18 T threadpool_monitor_every_100ms
+libwqm.a:wqm.o:00000000000008ad T threadpool_monitor_to_terminal
+libwqm.a:wqm.o:000000000000262e T threadpool_set_global_resource_manager
+libwqm.a:wqm.o:000000000000253f T threadpool_set_idle_timeout
+libwqm.a:wqm.o:00000000000017b5 T threadpool_set_monitor
+libwqm.a:wqm.o:000000000000279f T threadpool_set_worker_local_data_manager
+libwqm.a:wqm.o:00000000000005c5 T threadpool_task_continuation
+libwqm.a:wqm.o:000000000000162b T threadpool_task_continue
+libwqm.a:wqm.o:00000000000018d1 T threadpool_wait_and_destroy
+libwqm.a:wqm.o:0000000000001b1d T threadpool_worker_local_data
 cc -shared -o libwqm.so wqm.o
 ```
 
