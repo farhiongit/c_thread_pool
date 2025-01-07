@@ -240,7 +240,8 @@ threadpool_task_continuation (int (*work) (struct threadpool *threadpool, void *
     errno = ENOMEM;
     return 0;
   }
-  continuator->uid = (((uint64_t) (++seq ? seq : ++seq)) << 32) + (uint64_t) rand ();
+  continuator->uid = (uint64_t) (++seq ? seq : ++seq)   // Less significant (non null sequence)
+    + (((uint64_t) rand ()) << 32);     // Most significant (random)
   continuator->job = Worker_context.current_task->job;
   continuator->work = work;
   continuator->abs_timeout = delay_to_abs_timespec (seconds > 0 ? seconds : 0);
