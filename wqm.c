@@ -16,11 +16,13 @@
 #include <time.h>
 #include <stdint.h>
 #include <math.h>
+#include "map.h"
+#include "timer.h"
 #include "wqm.h"
 
 #define assert(cond) assert2((cond), (#cond))
 #define thrd_honored(cond) do {int __c = (cond); assert2((__c) == thrd_success || (__c) == thrd_timedout || (__c) == thrd_busy, (#cond)); } while (0)
-#define assert2(cond, text) do { if (!(cond)) { fprintf (stderr, "%s:%s:%d: condition \"%s\" failed.\n", __FILE__, __func__, __LINE__, (text)); abort (); } } while (0)
+#define assert2(cond, text) do { if (!(cond)) { fprintf (stderr, "%s:%d:%s: condition \"%s\" failed.\n", __FILE__, __LINE__, __func__, (text)); abort (); } } while (0)
 #ifndef i18n_init
 #  define _(s) (s)
 #  define i18n_init
@@ -101,119 +103,91 @@ static thread_local struct      // Thread local worker-specific storage (see als
 
 static once_flag THREADPOOL_INIT = ONCE_FLAG_INIT;
 
-// ================= timespec helpers =================
-static int
-timespec_cmp (struct timespec a, struct timespec b)
-{
-  return (a.tv_sec < b.tv_sec ? -1 : a.tv_sec > b.tv_sec ? 1 : a.tv_nsec < b.tv_nsec ? -1 : a.tv_nsec > b.tv_nsec ? 1 : 0);
-}
-
-static struct timespec
-delay_to_abs_timespec (double seconds)
-{
-  long sec = lround (trunc (seconds));  // C standard function
-  long nsec = lround ((seconds - trunc (seconds)) * 1000 * 1000 * 1000);
-  struct timespec t;
-  timespec_get (&t, TIME_UTC);  // C standard function, returns now. UTC since cnd_timedwait is UTC-based.
-  t.tv_sec += sec + (t.tv_nsec + nsec) / (1000 * 1000 * 1000);
-  t.tv_nsec = (t.tv_nsec + nsec) % (1000 * 1000 * 1000);
-  return t;
-}
-
 // ================= Continuators =================
-static struct continuators
+struct continuator_data
 {
-  struct continuator
-  {
-    struct continuator *next;
-    struct job job;
-    int (*work) (struct threadpool * threadpool, void *data);
-    uint64_t uid;
-    struct timespec abs_timeout;        // tv_sec and tv_nsec */
-    struct threadpool *threadpool;
-  } *head, *tail;
-  mtx_t mutex;                  // The static mutex on't be mtx_destroy'ed.
+  struct job job;
+  int (*work) (struct threadpool * threadpool, void *data);
+  uint64_t uid;
+  void *timeout_timer;
+  struct threadpool *threadpool;
+};
+
+static const void *
+continuator_data_get_key (void *pa)
+{
+  struct continuator_data *a = pa;
+  return &a->uid;
+}
+
+static int
+continuator_data_cmp_key (const void *pa, const void *pb, void *arg)
+{
+  (void) arg;
+  const uint64_t *a = pa;
+  const uint64_t *b = pb;
+  return *a > *b ? 1 : *a < *b ? -1 : 0;
+}
+
+static struct
+{
+  map *map;
 } Continuators = { 0 };
 
 static int
-from_threadpool (struct continuator *continuator, void *arg)
+threadpool_task_continuation_remove (void *data, void *res, int *remove)
 {
-  struct threadpool *threadpool = arg;
-  return (continuator && continuator->threadpool == threadpool);
+  *(struct continuator_data **) res = data;     // The operator returns the removed data.
+  *remove = 1;
+  return 0;
 }
 
 static int
-from_uid (struct continuator *continuator, void *arg)
+threadpool_task_continuation_timeout_handler (void *arg)
 {
-  uint64_t uid = *(uint64_t *) arg;
-  return (continuator && continuator->uid == uid);
+  uint64_t *uid = arg;          // &uid is retrieved from the timer
+  struct continuator_data *data = 0;
+  map_find_key (Continuators.map, uid, threadpool_task_continuation_remove, &data);
+  if (data)                     // Time out the continuator
+  {
+    data->threadpool->nb_failed_tasks++;
+    if (data->job.data_delete)  // The job won't be processed : delete it.
+      data->job.data_delete (data->job.data);
+    assert (data->threadpool->nb_async_tasks--);        // The predicate threadpool_is_done_predicate is modified: broadcast.
+    // Do not broadcast before the continuator is thrown away.
+    thrd_honored (cnd_broadcast (&data->threadpool->proceed_or_conclude_or_runoff));
+    free (data);                // The only place where the continuator is destroyed.
+  }
+  return EXIT_SUCCESS;
 }
 
 static size_t threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job),
                                       int is_continuation);
-static struct continuator *
-threadpool_continuators_get_first_valid (int (*filter) (struct continuator *continuator, void *arg), void *arg, int remove, struct timespec *abs_timeout)
+
+int
+threadpool_task_continue (uint64_t uid)
 {
-  thrd_honored (mtx_lock (&Continuators.mutex));
-  struct timespec now;
-  timespec_get (&now, TIME_UTC);        // C standard function, returns now.
-  // Remove timed out continuators.
-  struct continuator *prev = 0;
-  for (struct continuator * c = Continuators.head; c;)
-    if (timespec_cmp (c->abs_timeout, now) < 0) // Remove timed-out continuators.
-    {
-      c->threadpool->nb_failed_tasks++;
-      assert (c->threadpool->nb_async_tasks--); // The predicate threadpool_is_done_predicate is modified: broadcast.
-      thrd_honored (cnd_broadcast (&c->threadpool->proceed_or_conclude_or_runoff));
-      if (prev)
-      {
-        if (!(prev->next = c->next))
-          Continuators.tail = prev;
-        if (c->job.data_delete)
-          c->job.data_delete (c->job.data);
-        free (c);
-        c = prev->next;
-      }
-      else                      // if (!prev), means c == Continuators.head
-      {
-        if (!(Continuators.head = Continuators.head->next))
-          Continuators.tail = 0;
-        if (c->job.data_delete)
-          c->job.data_delete (c->job.data);
-        free (c);
-        c = Continuators.head;
-      }
-    }                           // if (timespec_cmp (c->abs_timeout, now) < 0)
-    else                        // if (timespec_cmp (c->abs_timeout, now) >= 0)
-    {
-      prev = c;
-      c = c->next;
-    }
-  // Find the first valid continuator.
-  prev = 0;
-  struct continuator *continuator = 0;
-  for (struct continuator * c = Continuators.head; c; c = c->next)
-    if (filter (c, arg))
-    {
-      continuator = c;
-      if (!remove)
-        // Do not broadcast before the continuator is converted into a task (see threadpool_task_continue).
-        thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
-      else if (prev)
-      {
-        if (!(prev->next = prev->next->next))
-          Continuators.tail = prev;
-      }
-      else if (!(Continuators.head = Continuators.head->next))
-        Continuators.tail = 0;
-      if (abs_timeout)
-        *abs_timeout = c->abs_timeout;
-      break;
-    }
-    else
-      prev = c;
-  thrd_honored (mtx_unlock (&Continuators.mutex));
-  return continuator;
+  struct continuator_data *data = 0;
+  map_find_key (Continuators.map, &uid, threadpool_task_continuation_remove, &data);
+  if (!data)
+  {
+    errno = ETIMEDOUT;
+    return EXIT_FAILURE;
+  }
+  int ret = EXIT_SUCCESS;
+  if (!threadpool_create_task (data->threadpool, data->work, data->job.data, data->job.data_delete, 1)) // is_continuation = 1
+  {
+    fprintf (stderr, "%s: %s\n", __func__, _("Continuation failed."));
+    data->threadpool->nb_failed_tasks++;
+    if (data->job.data_delete)  // The job won't be processed : delete it.
+      data->job.data_delete (data->job.data);
+    ret = EXIT_FAILURE;
+  }
+  // Remove the asynchronous task (after the continuator has been converted into a task to keep threadpool_is_done_predicate true).
+  assert (data->threadpool->nb_async_tasks--);
+  // Broadcast (but not before the continuator has been converted into a task).
+  thrd_honored (cnd_broadcast (&data->threadpool->proceed_or_conclude_or_runoff));
+  return ret;
 }
 
 uint64_t
@@ -233,58 +207,28 @@ threadpool_task_continuation (int (*work) (struct threadpool *threadpool, void *
     return 0;
   }
 
-  struct continuator *continuator = calloc (1, sizeof (*continuator));
-  if (!continuator)
+  struct continuator_data *data = calloc (1, sizeof (*data));
+  if (!data)
   {
     fprintf (stderr, "%s: %s\n", __func__, _("Out of memory."));
     errno = ENOMEM;
     return 0;
   }
-  continuator->uid = (uint64_t) (++seq ? seq : ++seq)   // Less significant (non null sequence)
-    + (((uint64_t) rand ()) << 32);     // Most significant (random)
-  continuator->job = Worker_context.current_task->job;
-  continuator->work = work;
-  continuator->abs_timeout = delay_to_abs_timespec (seconds > 0 ? seconds : 0);
-  continuator->threadpool = Worker_context.threadpool;
+  data->job = Worker_context.current_task->job;
+  data->work = work;
+  struct timespec abs_timeout = delay_to_abs_timespec (seconds > 0 ? seconds : 0);      // from timers.h
+  data->threadpool = Worker_context.threadpool;
   Worker_context.current_task->to_be_continued = 1;
-  thrd_honored (mtx_lock (&Continuators.mutex));
-  if (Continuators.tail)
+  do
   {
-    Continuators.tail->next = continuator;
-    Continuators.tail = Continuators.tail->next;
+    data->uid = (uint64_t) (++seq ? seq : ++seq)        // Less significant (non null sequence)
+      + (((uint64_t) rand ()) << 32);   // Most significant (random)
   }
-  else
-    Continuators.head = Continuators.tail = continuator;
-  continuator->threadpool->nb_async_tasks++;
-  thrd_honored (mtx_unlock (&Continuators.mutex));
-  return continuator->uid;
-}
-
-int
-threadpool_task_continue (uint64_t uid)
-{
-  struct continuator *continuator = threadpool_continuators_get_first_valid (from_uid, &uid, 1, 0);     // continuator is removed from the continuators
-  int ret = EXIT_FAILURE;
-  if (!continuator)
-    errno = ETIMEDOUT;
-  else                          // Convert the continuator into a task.
-  {
-    // Create the task.
-    if (threadpool_create_task (continuator->threadpool, continuator->work, continuator->job.data, continuator->job.data_delete, 1))
-      ret = EXIT_SUCCESS;
-    else
-    {
-      fprintf (stderr, "%s: %s\n", __func__, _("Continuation failed."));
-      if (continuator->job.data_delete) // The job won't be processed : delete it.
-        continuator->job.data_delete (continuator->job.data);
-    }
-    // Remove the asynchronous task (but not before the continuator has been converted into a task to keep threadpool_is_done_predicate true).
-    assert (continuator->threadpool->nb_async_tasks--);
-    // Broadcast (but not before the continuator has been converted into a task).
-    thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
-    free (continuator);
-  }
-  return ret;
+  while (!map_insert_data (Continuators.map, data));
+  assert (data->uid != 0);      // Means it has not been continued yet.
+  data->timeout_timer = timer_set (abs_timeout, threadpool_task_continuation_timeout_handler, &data->uid);      // &uid is passed to the timer
+  data->threadpool->nb_async_tasks++;
+  return data->uid;
 }
 
 // ================= Monitoring =================
@@ -402,7 +346,7 @@ threadpool_monitor_every_100ms (struct threadpool_monitor d)
 static void
 threadpool_init (void)          // Called once.
 {
-  thrd_honored (mtx_init (&Continuators.mutex, mtx_plain));     // The static mutex won't be mtx_destroy'ed.
+  Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, MAP_UNIQUENESS);        // Won't be destroyed.
 }
 
 struct threadpool *
@@ -467,16 +411,15 @@ thread_worker_runner (void *args)
   Worker_context.local_data = threadpool->worker_local_data_manager.make ? threadpool->worker_local_data_manager.make () : 0;   // Call to threadpool->worker_local_data.make is thread-safe.
   while (1)                     // Looping on tasks (concurrently with other workers)
   {
-    struct timespec timeout = delay_to_abs_timespec (threadpool->idle_timeout);
+    struct timespec timeout = delay_to_abs_timespec (threadpool->idle_timeout); // from timers.h
     threadpool->nb_idle_workers++;
     while (!threadpool_something_to_process_predicate (threadpool) && !threadpool_is_done_predicate (threadpool))       // Predicate is not fulfilled: wait in idle state.
     {
       threadpool_monitor_call (threadpool);
-      struct timespec continuator_abs_timeout;
-      if (threadpool_continuators_get_first_valid (from_threadpool, threadpool, 0, &continuator_abs_timeout) && timespec_cmp (continuator_abs_timeout, timeout) > 0)
-        timeout = continuator_abs_timeout;
       int cnd;
-      if ((cnd = cnd_timedwait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex, &timeout)) == thrd_timedout)    // Wait for condition to be signaled or until after the TIME_UTC-based calendar time pointed to by &timeout
+      if (threadpool->nb_async_tasks)
+        thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));       // Wait for continuators to be processed (threadpool_task_continue) or to timeout (threadpool_task_continuation_timeout_handler).
+      else if ((cnd = cnd_timedwait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex, &timeout)) == thrd_timedout)       // Wait for condition to be signaled or until after the TIME_UTC-based calendar time pointed to by &timeout
         break;                  // Timeout: time to end the worker.
       else
         thrd_honored (cnd);
@@ -508,8 +451,8 @@ thread_worker_runner (void *args)
           threadpool->nb_succeeded_tasks++;
       }
       threadpool_monitor_call (threadpool);
-      if (!old_elem->task.to_be_continued && old_elem->task.job.data_delete)    // MT-safe
-        old_elem->task.job.data_delete (old_elem->task.job.data);       // Note (*): get rid of job after use.
+      if (!old_elem->task.to_be_continued && old_elem->task.job.data_delete)    // Call to task.job.data_delete is MT-safe (guarded by threadpool->mutex)
+        old_elem->task.job.data_delete (old_elem->task.job.data);       // Note (*): get rid of job after use (and if it is not scheduled in a continuation).
       free (old_elem);
       continue;                 // while (1) 
     }                           // if (threadpool_something_to_process_predicate (threadpool))
@@ -584,7 +527,7 @@ threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threa
     threadpool->nb_submitted_tasks++;
   threadpool->nb_pending_tasks++;
   if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is idle and available:
-    thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff));     // Signal it to wake one of the idle workers.
+    thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff));     // Signal it to wake up one of the idle workers.
   else if (threadpool->nb_alive_workers < threadpool->requested_nb_workers)     // No workers are idle and available to process this new task at once:
     for (size_t i = 0; i < threadpool->requested_nb_workers; i++)       // Search for a non-running worker and start it.
       if (!threadpool->active_worker_id[i] && thrd_create (&threadpool->worker_id[i], thread_worker_runner, threadpool) == thrd_success)        // Create a new worker.

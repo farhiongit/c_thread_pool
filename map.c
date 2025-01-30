@@ -10,152 +10,30 @@ int MAP_NONE = 0;
 int MAP_UNIQUENESS = 1;
 int MAP_STABLE = 2;
 
-struct smap;
+struct map;
 struct map_elem
 {
   struct map_elem *lt, *upper, *ge;
   void *data;
   int rand;
-  struct smap *map;
+  struct map *map;
 };
 
-struct smap
+struct map
 {
   struct map_elem *first, *last, *root;
   mtx_t mutex;
-  int (*cmp_key) (void *, void *, void *);
-  void * (*get_key) (void *);
+  int (*cmp_key) (const void *, const void *, void *);
+  const void *(*get_key) (void *);
   void *arg;
   int uniqueness, stable;       // Properties.
 };
 
-struct smap *
-map_create (void * (*get_key) (void *data), int (*cmp_key) (void *key_a, void *key_bb, void *arg), void *arg, int property)
+static void *
+_map_remove (struct map_elem *old)
 {
-  if (!get_key)
-  {
-    errno = EINVAL;
-    return 0;
-  }
-  struct smap *l = calloc (1, sizeof (*l));
-  if (!l)
-  {
-    errno = ENOMEM;
-    fprintf (stderr, "%s: %s\n", __func__, "Out of memory.");
-    return 0;
-  }
-  l->get_key = get_key;
-  l->cmp_key = cmp_key;
-  l->arg = arg;
-  l->uniqueness = property & MAP_UNIQUENESS;
-  l->stable = (property & MAP_UNIQUENESS) || (property & MAP_STABLE);
-  if (mtx_init (&l->mutex, mtx_plain) != thrd_success)
-  {
-    if (l)
-      free (l);
-    l = 0;
-    errno = ENOMEM;
-    fprintf (stderr, "%s: %s\n", __func__, "Out of memory.");
-  }
-  return l;
-}
-
-int
-map_destroy (struct smap *l)
-{
-  if (!l)
-  {
-    errno = EINVAL;
-    return EXIT_FAILURE;
-  }
-  if (map_first (l))
-  {
-    errno = EPERM;
-    return EXIT_FAILURE;
-  }
-  mtx_destroy (&l->mutex);
-  free (l);
-  return EXIT_SUCCESS;
-}
-
-void *
-map_get_data (struct map_elem *e)
-{
-  if (!e)
-  {
-    errno = EINVAL;
-    return 0;
-  }
-  return e->data;
-}
-
-struct map_elem *
-map_insert_data (struct smap *l, void *data)
-{
-  if (!l)
-  {
-    errno = EINVAL;
-    return 0;
-  }
-  struct map_elem *new = calloc (1, sizeof (*new));
-  if (!new)
-  {
-    errno = ENOMEM;
-    fprintf (stderr, "%s: %s\n", __func__, "Out of memory.");
-    return 0;
-  }
-  new->data = data;
-  new->map = l;
-  new->rand = (l->uniqueness || l->stable) ? 0 : rand ();
-  mtx_lock (&l->mutex);
-  struct map_elem *upper;
-  struct map_elem *ret = new;
-  int cmp;
-  if (!(upper = l->root))
-    l->root = l->first = l->last = new;
-  else
-    while (1)
-      if ((cmp = l->cmp_key ? l->cmp_key (l->get_key (new->data), l->get_key (upper->data), l->arg) : 0) < 0
-          || (cmp == 0 && new->rand < upper->rand))
-      {
-        if (upper->lt)
-          upper = upper->lt;
-        else
-        {
-          if (((upper->lt = new)->upper = upper) == l->first)
-            l->first = new;
-          break;
-        }
-      }
-      else if (l->uniqueness && cmp == 0)
-      {
-        errno = EPERM;
-        ret = 0;
-        break;
-      }
-      else if (upper->ge)       // && (new >= upper)
-        upper = upper->ge;
-      else                      // (!upper->ge) && (new >= upper)
-      {
-        if (((upper->ge = new)->upper = upper) == l->last)
-          l->last = new;
-        break;
-      }
-  mtx_unlock (&l->mutex);
-  return ret;
-}
-
-void *
-map_remove (struct map_elem *old)
-{
-  if (!old)
-  {
-    errno = EINVAL;
-    return 0;
-  }
-
   struct map_elem *e = old;
-  struct smap *l = e->map;
+  struct map *l = e->map;
   mtx_lock (&l->mutex);
   if (e == l->first)
   {                             // l->first = map_next (l->first)
@@ -198,7 +76,7 @@ map_remove (struct map_elem *old)
     l->root = child;            // Update map->root
   else if (e == e->upper->lt)
     e->upper->lt = child;
-  else  // (e == e->upper->ge)
+  else                          // (e == e->upper->ge)
     e->upper->ge = child;
   mtx_unlock (&l->mutex);
 
@@ -207,44 +85,11 @@ map_remove (struct map_elem *old)
   return data;
 }
 
-struct map_elem *
-map_first (struct smap *l)
+static struct map_elem *
+_map_previous (struct map_elem *e)
 {
-  if (!l)
-  {
-    errno = EINVAL;
-    return 0;
-  }
-  mtx_lock (&l->mutex);
-  struct map_elem *ret = l->first;
-  mtx_unlock (&l->mutex);
-  return ret;
-}
-
-struct map_elem *
-map_last (struct smap *l)
-{
-  if (!l)
-  {
-    errno = EINVAL;
-    return 0;
-  }
-  mtx_lock (&l->mutex);
-  struct map_elem *ret = l->last;
-  mtx_unlock (&l->mutex);
-  return ret;
-}
-
-struct map_elem *
-map_previous (struct map_elem *e)
-{
-  if (!e)
-  {
-    errno = EINVAL;
-    return 0;
-  }
   struct map_elem *ret = e;
-  struct smap *l = ret->map;
+  struct map *l = ret->map;
   mtx_lock (&l->mutex);
   if (ret->lt)
     for (ret = ret->lt; ret->ge; ret = ret->ge) /* nothing */ ;
@@ -260,16 +105,11 @@ map_previous (struct map_elem *e)
   return ret;
 }
 
-struct map_elem *
-map_next (struct map_elem *e)
+static struct map_elem *
+_map_next (struct map_elem *e)
 {
-  if (!e)
-  {
-    errno = EINVAL;
-    return 0;
-  }
   struct map_elem *ret = e;
-  struct smap *l = ret->map;
+  struct map *l = ret->map;
   mtx_lock (&l->mutex);
   if (ret->ge)
     for (ret = ret->ge; ret->lt; ret = ret->lt) /* nothing */ ;
@@ -285,22 +125,196 @@ map_next (struct map_elem *e)
   return ret;
 }
 
-struct map_elem *
-map_find_key (struct smap *l, void *key)
+static void
+_map_traverse (map *m, int (*op) (void *data, void *res, int *remove), void *res, int backward)
 {
-  if (!l || !key)
+  if (!m || !op)
+  {
+    errno = EINVAL;
+    return;
+  }
+  mtx_lock (&m->mutex);         // mtx_recursive
+  for (map_elem * e = backward ? m->last : m->first; e;)
+  {
+    map_elem *n = backward ? _map_previous (e) : _map_next (e);
+    int remove = 0;
+    int ret = op (e->data, res, &remove);
+    if (remove)
+      _map_remove (e);
+    if (!ret)
+      break;
+    e = n;
+  }
+  mtx_unlock (&m->mutex);
+}
+
+struct map *
+map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key_a, const void *key_bb, void *arg), void *arg, int property)
+{
+  if (!get_key && cmp_key)
+  {
+    errno = EINVAL;
+    fprintf (stderr, "%s: %s\n", __func__, "Undefined key.");
+    return 0;
+  }
+  if ((property & MAP_UNIQUENESS) && !cmp_key)
+  {
+    errno = EINVAL;
+    fprintf (stderr, "%s: %s\n", __func__, "Undefined key comparator.");
+    return 0;
+  }
+  if ((property & MAP_STABLE) && get_key && !cmp_key)
+  {
+    errno = EINVAL;
+    fprintf (stderr, "%s: %s\n", __func__, "Undefined key comparator.");
+    return 0;
+  }
+  if (get_key && !cmp_key)
+    fprintf (stderr, "%s: %s\n", __func__, "Missing key comparator.");
+  struct map *l = calloc (1, sizeof (*l));
+  if (!l)
+  {
+    errno = ENOMEM;
+    fprintf (stderr, "%s: %s\n", __func__, "Out of memory.");
+    return 0;
+  }
+  l->get_key = get_key;
+  l->cmp_key = cmp_key;
+  l->uniqueness = (property & MAP_UNIQUENESS) ? 1 : 0;
+  l->arg = arg;
+  l->stable = l->uniqueness || (property & MAP_STABLE);
+  if (mtx_init (&l->mutex, mtx_recursive) != thrd_success)      // mtx_recursive : the SAME thread can lock (and unlock) the mutex several times. See https://en.wikipedia.org/wiki/Reentrant_mutex for more.
+  {
+    free (l);
+    errno = ENOMEM;
+    fprintf (stderr, "%s: %s\n", __func__, "Out of memory.");
+    return 0;
+  }
+  return l;
+}
+
+const void *
+MAP_KEY_IS_DATA (void *data)
+{
+  return data;
+}
+
+int
+map_destroy (struct map *l)
+{
+  if (!l)
+  {
+    errno = EINVAL;
+    return EXIT_FAILURE;
+  }
+  mtx_lock (&l->mutex);
+  if (l->first)
+  {
+    errno = EPERM;
+    fprintf (stderr, "%s: %s\n", __func__, "Not empty.");
+    mtx_unlock (&l->mutex);
+    return EXIT_FAILURE;
+  }
+  mtx_unlock (&l->mutex);
+  mtx_destroy (&l->mutex);
+  free (l);
+  return EXIT_SUCCESS;
+}
+
+int
+map_insert_data (struct map *l, void *data)
+{
+  if (!l)
   {
     errno = EINVAL;
     return 0;
   }
+  struct map_elem *new = calloc (1, sizeof (*new));
+  if (!new)
+  {
+    errno = ENOMEM;
+    fprintf (stderr, "%s: %s\n", __func__, "Out of memory.");
+    return 0;
+  }
+  new->data = data;
+  new->map = l;
+  new->rand = (l->uniqueness || l->stable) ? 0 : rand ();
   mtx_lock (&l->mutex);
   struct map_elem *upper;
-  struct map_elem *ret = 0;
-  int cmp_key;
+  int cmp;
+  int ret = 1;
+  if (!(upper = l->root))
+    l->root = l->first = l->last = new;
+  else if (!l->cmp_key && l->stable)
+  {
+    (l->last->ge = new)->upper = l->last;
+    l->last = new;
+  }
+  else
+    while (1)
+      if ((cmp = l->cmp_key ? l->cmp_key (l->get_key (new->data), l->get_key (upper->data), l->arg) : 0) < 0 || (cmp == 0 && new->rand < upper->rand))
+      {
+        if (upper->lt)
+          upper = upper->lt;
+        else
+        {
+          if (((upper->lt = new)->upper = upper) == l->first)
+            l->first = new;
+          break;
+        }
+      }
+      else if (l->uniqueness && cmp == 0)
+      {
+        errno = EPERM;
+        free (new);             // new is not inserted.
+        ret = 0;
+        break;
+      }
+      else if (upper->ge)       // && (new >= upper)
+        upper = upper->ge;
+      else                      // (!upper->ge) && (new >= upper)
+      {
+        if (((upper->ge = new)->upper = upper) == l->last)
+          l->last = new;
+        break;
+      }
+  mtx_unlock (&l->mutex);
+  return ret;
+}
+
+void
+map_traverse (map *m, int (*op) (void *data, void *res, int *remove), void *res)
+{
+  _map_traverse (m, op, res, 0);
+}
+
+void
+map_traverse_backward (map *m, int (*op) (void *data, void *res, int *remove), void *res)
+{
+  _map_traverse (m, op, res, 1);
+}
+
+void
+map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, int *remove), void *res)
+{
+  if (!l->cmp_key)
+  {
+    fprintf (stderr, "%s: %s\n", __func__, "Undefined key.");
+    errno = EPERM;
+    return;
+  }
+  if (!l || !key || !op)
+  {
+    errno = EINVAL;
+    return;
+  }
+  mtx_lock (&l->mutex);
+  struct map_elem *upper;
   if ((upper = l->root))
   {
+    int cmp_key;
     while (1)
-      if ((cmp_key = l->cmp_key ? l->cmp_key (key, l->get_key (upper->data), l->arg) : 0) < 0)
+      if ((cmp_key = l->cmp_key (key, l->get_key (upper->data), l->arg)) < 0)
       {
         if (upper->lt)
           upper = upper->lt;
@@ -309,8 +323,15 @@ map_find_key (struct smap *l, void *key)
       }
       else if (cmp_key == 0)
       {
-        ret = upper;
-        break;
+        int remove = 0;
+        int ret = op (upper->data, res, &remove);
+        struct map_elem *next = upper->ge;
+        if (remove)
+          _map_remove (upper);
+        if (ret && next && l->cmp_key (key, l->get_key (next->data), l->arg) == 0)
+          upper = next;
+        else
+          break;
       }
       else if (upper->ge)       // && (new >= upper)
         upper = upper->ge;
@@ -318,5 +339,4 @@ map_find_key (struct smap *l, void *key)
         break;
   }
   mtx_unlock (&l->mutex);
-  return ret;
 }
