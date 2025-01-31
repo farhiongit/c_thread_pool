@@ -10,7 +10,9 @@ typedef struct map_elem map_elem;
 // Returns 0 if the map could not be allocated (and errno set to ENOMEM).
 // Otherwise, returns a pointer to the created map.
 // If not 0, the comparison function 'cmp_key' must return an integer less than, equal to, or greater than zero.
-// if the first argument is considered to be respectively less than, equal to, or greater than the second. 'cmp_key' is applied on 'get_key (data)'.
+// if the first argument is considered to be respectively less than, equal to, or greater than the second.
+// 'cmp_key' is applied on 'get_key (data)'.
+// 'get_key' and 'cmp_key' should be either both set or both unset.
 // A pointer is passed (as third argument) to the comparison function 'cmp_key' via 'arg' (arg can be 0).
 map *map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key_a, const void *key_b, void *arg), void *arg, int property);
 
@@ -23,16 +25,17 @@ extern int MAP_NONE;            // The second data is inserted either (randomly)
 
 const void *MAP_KEY_IS_DATA (void *);
 
-/* 6 possible uses:
+/* 7 possible uses:
 
-| Use            | Property       | 'get_key'       | Comment                                                                                              |
-| -              | -              | -               | -                                                                                                    |
-| Map            | MAP_UNIQUENESS | Non-zero        | Elements are unique. 'get_key' and 'cmp_key' must be set.                                            |
-| Set            | MAP_UNIQUENESS | MAP_KEY_IS_DATA | Elements are unique. 'get_key' and 'cmp_key' must be set.                                            |
-| Ordered list   | MAP_STABLE     | MAP_KEY_IS_DATA | Equal elements are ordered in the order they were inserted. 'cmp_key' must be set.                   |
-| Unordered list | MAP_NONE       | 0               | 'cmp_key' is ignored.                                                                                |
-| FIFO           | MAP_STABLE     | 0               | Elements are appended after the last element. Use map_remove (map_first (map *)) to remove elements. |
-| LIFO           | MAP_STABLE     | 0               | Elements are appended after the last element. Use map_remove (map_last (map *)) to remove elements.  |
+| Use            | Property           | 'get_key'       | Comment                                                                                              |
+| -              | -                  | -               | -                                                                                                    |
+| Map            | MAP_UNIQUENESS     | Non-zero        | Elements are unique. 'get_key' and 'cmp_key' must be set.                                            |
+| Dictionary     | not MAP_UNIQUENESS | Non-zero        | Elements are not unique. 'get_key' and 'cmp_key' must be set.                                        |
+| Set            | MAP_UNIQUENESS     | MAP_KEY_IS_DATA | Elements are unique. 'cmp_key' must be set.                                                          |
+| Ordered list   | MAP_STABLE         | MAP_KEY_IS_DATA | Equal elements are ordered in the order they were inserted. 'cmp_key' must be set.                   |
+| Unordered list | MAP_NONE           | 0               | 'cmp_key' must be 0 as well.                                                                         |
+| FIFO           | MAP_STABLE         | 0               | Elements are appended after the last element. Use map_remove (map_first (map *)) to remove elements. |
+| LIFO           | MAP_STABLE         | 0               | Elements are appended after the last element. Use map_remove (map_last (map *)) to remove elements.  |
 
 (*) If cmp_key or get_key is 0 and property is MAP_STABLE, complexity is reduced by a factor log n.
 

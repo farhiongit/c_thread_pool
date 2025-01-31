@@ -107,11 +107,11 @@ This implementation of a thread pool brings unique features, not found anywhere 
 
 Those features are detailed below.
 
-Bonus:
+### Extra tools
 
-- 'map.h' and 'map.c' define an unprecedented implementation of a map MT-safe library that can manage maps, sets, ordered and unordered lists all with a minimalist interface.
-- 'timer.h' and 'timer.c' define a OS-independent timer (as compared to ).
-- 'trace.h' permits to globally trace calls to a function without changing the code.
+- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface.
+- `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
+- `trace.h` permits to globally trace calls to a function without changing the code.
 
 ## Detailed API
 

@@ -157,20 +157,12 @@ map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key
     fprintf (stderr, "%s: %s\n", __func__, "Undefined key.");
     return 0;
   }
-  if ((property & MAP_UNIQUENESS) && !cmp_key)
+  if (((property & MAP_UNIQUENESS) || get_key) && !cmp_key)
   {
     errno = EINVAL;
     fprintf (stderr, "%s: %s\n", __func__, "Undefined key comparator.");
     return 0;
   }
-  if ((property & MAP_STABLE) && get_key && !cmp_key)
-  {
-    errno = EINVAL;
-    fprintf (stderr, "%s: %s\n", __func__, "Undefined key comparator.");
-    return 0;
-  }
-  if (get_key && !cmp_key)
-    fprintf (stderr, "%s: %s\n", __func__, "Missing key comparator.");
   struct map *l = calloc (1, sizeof (*l));
   if (!l)
   {
