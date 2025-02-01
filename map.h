@@ -50,7 +50,7 @@ int map_insert_data (map *, void *data);
 
 // Signature of a user-defined selector on elements of the map.
 // The data of the element of the map is passed as the first argument of the map_selector.
-// The second argument 'context' is the pointer passed to map_traverse, map_traverse_backward and map_find_key (as last argument).
+// The second argument 'context' is the pointer passed to map_traverse and map_traverse_backward (as last argument).
 // Should return 1 if the 'data' conforms to the user-defined conditions, 0 otherwise.
 typedef int (*map_selector) (void *data, void *context);
 
@@ -70,7 +70,7 @@ typedef int (*map_operator) (void *data, void *context, int *remove);
 size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
 
 // Applies 'operator' on all the data stored in the map as long as the operator 'op' returns non-zero, from the first element to the last or the other way round.
-// If 'sel' is not null, only 'data' for which the selector 'sel' returns non-zero.
+// If 'sel' is not null, 'op' is applied only to 'data' for which the selector 'sel' returns non-zero.
 // 'context' is passed as the second argument of operator 'op'.
 // Returns the number of elements of the map on which the operator 'op' has been applied.
 // Complexity : n * log n (see (*)) -- MT-safe
