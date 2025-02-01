@@ -48,11 +48,19 @@ int map_destroy (map *);
 // Complexity : log n (see (*) above) -- MT-safe
 int map_insert_data (map *, void *data);
 
+// Signature of a user-defined selector on elements of the map.
+// The data of the element of the map is passed as the first argument of the map_selector.
+// The second argument 'context' is the pointer passed to map_traverse, map_traverse_backward and map_find_key (as last argument).
+// Should return 1 if the 'data' conforms to the user-defined conditions, 0 otherwise.
+typedef int (*map_selector) (void *data, void *context);
+
+// Signature of a user-defined operator on elements of the map.
 // The data of the element of the map is passed as the first argument of the map_operator.
-// The second argument 'context' is the pointer passed to map_traverse, map_traverse_backward and map_find_key.
+// The second argument 'context' is the pointer passed to map_traverse, map_traverse_backward and map_find_key (as last argument).
 // The third argument 'remove' is a non-null pointer. If (and only if) the operator sets '*remove' to a non-zero value,
 //   - the element will be removed from the map thread-safely ;
 //   - the operator SHOULD free the data passed to it if it was allocated dynamically (otherwise it would be lost).
+// Should return 1 if the operator should be applied on other elements of the map, 0 otherwise.
 typedef int (*map_operator) (void *data, void *context, int *remove);
 
 // If 'get_key' and 'cmp_key' are not null, applies 'operator' on the data of the elements in the map that matches the key (for which 'cmp_key' returns 0), as long as 'op' returns non-zero.
@@ -61,13 +69,17 @@ typedef int (*map_operator) (void *data, void *context, int *remove);
 // Complexity : log n (see (*)) -- MT-safe
 size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
 
-// Applies 'operator' on all the data stored in the map as long as 'op' returns non-zero, from the first element to the last or the other way round.
+// Applies 'operator' on all the data stored in the map as long as the operator 'op' returns non-zero, from the first element to the last or the other way round.
+// If 'sel' is not null, only 'data' for which the selector 'sel' returns non-zero.
 // 'context' is passed as the second argument of operator 'op'.
-// Returns the number of elements on which the operator 'op' has been applied.
+// Returns the number of elements of the map on which the operator 'op' has been applied.
 // Complexity : n * log n (see (*)) -- MT-safe
-size_t map_traverse (map *, map_operator op, void *context);
-size_t map_traverse_backward (map *, map_operator op, void *context);
+size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
+size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *context);
 
+// Note: map_find_key, map_traverse, map_traverse_backward and map_insert_data can call each other (the map should be passed in the 'context' argument though).
+
+// Helper map operator.
 // If the parameter context of 'map_find_key', 'map_traverse' or 'map_traverse_backward' is a pointer,
 // the helper operator 'MAP_REMOVE_FIRST' removes and retrieves the first element found by 'map_find_key', 'map_traverse' or 'map_traverse_backward'
 // and sets the pointer 'context' to the data of this element.

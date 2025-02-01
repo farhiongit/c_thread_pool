@@ -190,6 +190,13 @@ print_data (void *data, void *res, int *remove)
   *remove = 0;                  // Tells: do not remove the data from the map.
   return 1;                     // Tells: continue traversing.
 }
+
+static int
+select_c (void *data, void *res)
+{
+  (void) res;
+  return (*(char *) data == 'c');
+}
 #endif
 
 int
@@ -226,50 +233,52 @@ main (void)
     map_insert_data (li, "cc");
     map_insert_data (li, "d");
 
-    map_traverse (li, print_data, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
-    map_traverse_backward (li, print_data, 0);
+    map_traverse_backward (li, print_data, 0, 0);
+    fprintf (stdout, "\n");
+    map_traverse (li, print_data, select_c, 0);
     fprintf (stdout, "\n");
 
     char *data;
-    if (map_traverse (li, MAP_REMOVE_FIRST, &data))     // Remove the first found element from the map.
+    if (map_traverse (li, MAP_REMOVE_FIRST, 0, &data))  // Remove the first found element from the map.
     {
       fprintf (stdout, "%s <-- ", data);
-      map_traverse (li, print_data, 0);
+      map_traverse (li, print_data, 0, 0);
       fprintf (stdout, "<-- %s\n", data);
       map_insert_data (li, data);       // Reinsert after use.
-      map_traverse (li, print_data, 0);
+      map_traverse (li, print_data, 0, 0);
       fprintf (stdout, "\n");
     }
 
     map_find_key (li, "c", remove_all_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
 
-    map_traverse (li, remove_one_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse (li, remove_one_data, 0, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
 
     map_find_key (li, "b", remove_one_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
 
     map_find_key (li, "d", remove_one_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
 
-    map_traverse_backward (li, remove_one_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse_backward (li, remove_one_data, 0, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
 
-    map_traverse (li, remove_one_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse (li, remove_one_data, 0, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
 
-    map_traverse (li, remove_all_data, 0);
-    map_traverse (li, print_data, 0);
+    map_traverse (li, remove_all_data, 0, 0);
+    map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
-    map_traverse (li, remove_all_data, 0);
+    map_traverse (li, remove_all_data, 0, 0);
     map_destroy (li);
     fprintf (stdout, "=======\n");
   }

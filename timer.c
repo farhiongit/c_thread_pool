@@ -83,19 +83,19 @@ timers_loop (void *)
   while (1)                     // Infinite loop, never ends.
   {
     struct timer_elem *earliest = 0;
-    map_traverse (Timers.map, Timers_get_earliest, &earliest);
+    map_traverse (Timers.map, Timers_get_earliest, 0, &earliest);
     if (!earliest)
       cnd_wait (&Timers.condition, &Timers.mutex);
     else if (cnd_timedwait (&Timers.condition, &Timers.mutex, &earliest->timeout) != thrd_timedout) /* nothing, loop again */ ;
     else
     {
       struct timer_elem *earliest2 = 0;
-      map_traverse (Timers.map, Timers_get_earliest, (void **) &earliest2);
+      map_traverse (Timers.map, Timers_get_earliest, 0, (void **) &earliest2);
       if (earliest == earliest2)        // Timers_head could have changed while waiting.
       {
         if (earliest->callback)
           earliest->callback (earliest->arg);
-        map_traverse (Timers.map, Timers_remove_earliest, 0);
+        map_traverse (Timers.map, Timers_remove_earliest, 0, 0);
       }
     }
   }
@@ -143,7 +143,7 @@ timer_remover (void *data, void *res, int *remove)
 void
 timer_unset (void *timer)
 {
-  if (map_traverse (Timers.map, timer_remover, timer))
+  if (map_traverse (Timers.map, timer_remover, 0, timer))
   {
     call_once (&TIMERS_INIT, timers_init);
     cnd_broadcast (&Timers.condition);

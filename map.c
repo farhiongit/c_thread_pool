@@ -118,7 +118,7 @@ _map_next (struct map_elem *e)
 }
 
 static size_t
-_map_traverse (map *m, int (*op) (void *data, void *res, int *remove), void *res, int backward)
+_map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res, int backward)
 {
   if (!m || !op)
   {
@@ -129,13 +129,17 @@ _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), void *res
   size_t nb_op = 0;
   for (map_elem * e = backward ? m->last : m->first; e;)
   {
-    map_elem *n = backward ? _map_previous (e) : _map_next (e);
     int remove = 0;
-    int ret = op (e->data, res, &remove);
-    nb_op++;
+    int go_on = 1;
+    if (!sel || sel (e->data, res))
+    {
+      go_on = op (e->data, res, &remove);
+      nb_op++;
+    }
+    map_elem *n = backward ? _map_previous (e) : _map_next (e);
     if (remove)
       _map_remove (e);
-    if (!ret)
+    if (!go_on)
       break;
     e = n;
   }
@@ -170,7 +174,9 @@ map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key
   l->uniqueness = (property & MAP_UNIQUENESS) ? 1 : 0;
   l->arg = arg;
   l->stable = l->uniqueness || (property & MAP_STABLE);
-  if (mtx_init (&l->mutex, mtx_plain) != thrd_success)
+  // mtx_recursive : the SAME thread can lock (and unlock) the mutex several times. See https://en.wikipedia.org/wiki/Reentrant_mutex for more.
+  // Therefore, map_find_key, map_traverse, map_traverse_backward and map_insert_data can call each other.
+  if (mtx_init (&l->mutex, mtx_recursive) != thrd_success)
   {
     free (l);
     errno = ENOMEM;
@@ -270,15 +276,15 @@ map_insert_data (struct map *l, void *data)
 }
 
 size_t
-map_traverse (map *m, int (*op) (void *data, void *res, int *remove), void *res)
+map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res)
 {
-  return _map_traverse (m, op, res, 0);
+  return _map_traverse (m, op, sel, res, 0);
 }
 
 size_t
-map_traverse_backward (map *m, int (*op) (void *data, void *res, int *remove), void *res)
+map_traverse_backward (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res)
 {
-  return _map_traverse (m, op, res, 1);
+  return _map_traverse (m, op, sel, res, 1);
 }
 
 size_t
@@ -297,36 +303,26 @@ map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, 
   }
   mtx_lock (&l->mutex);
   size_t nb_op = 0;
-  struct map_elem *upper;
-  if ((upper = l->root))
-  {
-    int cmp_key;
-    while (1)
-      if ((cmp_key = l->cmp_key (key, l->get_key (upper->data), l->arg)) < 0)
-      {
-        if (upper->lt)
-          upper = upper->lt;
-        else
-          break;
-      }
-      else if (cmp_key == 0)
-      {
-        struct map_elem *next = upper->ge;
-        int remove = 0;
-        int ret = op (upper->data, res, &remove);
-        nb_op++;
-        if (remove)
-          _map_remove (upper);
-        if (ret && next && l->cmp_key (key, l->get_key (next->data), l->arg) == 0)
-          upper = next;
-        else
-          break;
-      }
-      else if (upper->ge)       // && (new >= upper)
-        upper = upper->ge;
-      else                      // (!upper->ge) && (new >= upper)
+  int cmp_key;
+  struct map_elem *upper = l->root;
+  while (upper)
+    if ((cmp_key = l->cmp_key (key, l->get_key (upper->data), l->arg)) < 0)
+      upper = upper->lt;
+    else if (cmp_key == 0)
+    {
+      int remove = 0;
+      int ret = op (upper->data, res, &remove);
+      struct map_elem *next = upper->ge;
+      nb_op++;
+      if (remove)
+        _map_remove (upper);
+      if (ret && next && l->cmp_key (key, l->get_key (next->data), l->arg) == 0)
+        upper = next;
+      else
         break;
-  }
+    }
+    else                        // && (new >= upper)
+      upper = upper->ge;
   mtx_unlock (&l->mutex);
   return nb_op;
 }
