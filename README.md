@@ -109,7 +109,7 @@ Those features are detailed below.
 
 ### Extra tools
 
-- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface.
+- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface (see [README](README_map.md)).
 - `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
 - `trace.h` permits to globally trace calls to a function without changing the code.
 
