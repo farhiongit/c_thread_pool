@@ -110,7 +110,7 @@ timers_init (void)              // Called once.
   Timers.map = map_create (Timers_get_key, Timers_cmp_key, 0, MAP_NONE);        // Timers.map won't be destroyed.
   mtx_init (&Timers.mutex, mtx_plain);  // Timers.mutex won't be destroyed.
   cnd_init (&Timers.condition); // Timers.condition won't be destroyed.
-  thrd_create (&Timers.thread, timers_loop, 0); // Won't be destroyed. The thread will be ended with the caller to timer_set.
+  thrd_create (&Timers.thread, timers_loop, 0); // The thread won't be destroyed and will never end. It will be stopped when the thread of the caller to timer_set will end.
 }
 
 struct timespec
@@ -128,12 +128,9 @@ delay_to_abs_timespec (double seconds)
 void *
 timer_set (struct timespec timeout, int (*callback) (void *arg), void *arg)
 {
-  //TRACE_HERE;
   call_once (&TIMERS_INIT, timers_init);
-  mtx_lock (&Timers.mutex);
   void *timer = Timers_add (timeout, callback, arg);
   cnd_broadcast (&Timers.condition);
-  mtx_unlock (&Timers.mutex);
   return timer;
 }
 
@@ -146,9 +143,9 @@ timer_remover (void *data, void *res, int *remove)
 void
 timer_unset (void *timer)
 {
-  call_once (&TIMERS_INIT, timers_init);
-  mtx_lock (&Timers.mutex);
-  map_traverse (Timers.map, timer_remover, timer);
-  cnd_broadcast (&Timers.condition);
-  mtx_unlock (&Timers.mutex);
+  if (map_traverse (Timers.map, timer_remover, timer))
+  {
+    call_once (&TIMERS_INIT, timers_init);
+    cnd_broadcast (&Timers.condition);
+  }
 }

@@ -135,59 +135,64 @@ static struct
 } Continuators = { 0 };
 
 static int
-threadpool_task_continuation_remove (void *data, void *res, int *remove)
+threadpool_task_continuator_timeout_operator (void *data, void *res, int *remove)
 {
-  *(struct continuator_data **) res = data;     // The operator returns the removed data.
-  *remove = 1;
+  (void) res;
+  struct continuator_data *continuator = data;
+  continuator->threadpool->nb_failed_tasks++;
+  if (continuator->job.data_delete)     // The job won't be processed : delete it.
+    continuator->job.data_delete (continuator->job.data);
+  assert (continuator->threadpool->nb_async_tasks--);   // The predicate threadpool_is_done_predicate is modified: broadcast.
+  // Do not broadcast before the continuator is thrown away.
+  thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
+  free (continuator);           // Remove the continuator.
+  *remove = 1;                  // Remove the continuator fom the map.
   return 0;
 }
 
 static int
-threadpool_task_continuation_timeout_handler (void *arg)
+threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler
 {
-  uint64_t *uid = arg;          // &uid is retrieved from the timer
-  struct continuator_data *data = 0;
-  map_find_key (Continuators.map, uid, threadpool_task_continuation_remove, &data);
-  if (data)                     // Time out the continuator
-  {
-    data->threadpool->nb_failed_tasks++;
-    if (data->job.data_delete)  // The job won't be processed : delete it.
-      data->job.data_delete (data->job.data);
-    assert (data->threadpool->nb_async_tasks--);        // The predicate threadpool_is_done_predicate is modified: broadcast.
-    // Do not broadcast before the continuator is thrown away.
-    thrd_honored (cnd_broadcast (&data->threadpool->proceed_or_conclude_or_runoff));
-    free (data);                // The only place where the continuator is destroyed.
-  }
+  map_find_key (Continuators.map, p_uid, threadpool_task_continuator_timeout_operator, 0);
+  free (p_uid);
   return EXIT_SUCCESS;
 }
 
 static size_t threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job),
                                       int is_continuation);
 
+static int
+threadpool_task_continuator_continue_operator (void *data, void *res, int *remove)
+{
+  (void) res;
+  struct continuator_data *continuator = data;
+  if (!threadpool_create_task (continuator->threadpool, continuator->work, continuator->job.data, continuator->job.data_delete, 1))     // is_continuation = 1
+  {
+    fprintf (stderr, "%s: %s\n", __func__, _("Continuation failed."));
+    continuator->threadpool->nb_failed_tasks++;
+    if (continuator->job.data_delete)   // The job won't be processed : delete it.
+      continuator->job.data_delete (continuator->job.data);
+  }
+  // Remove the asynchronous task (after the continuator has been converted into a task to keep threadpool_is_done_predicate true).
+  assert (continuator->threadpool->nb_async_tasks--);
+  // Broadcast (but not before the continuator has been converted into a task).
+  //timer_unset (continuator->timeout_timer);     // Too slow
+  thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
+  free (continuator);           // Remove the continuator.
+  *remove = 1;                  // Remove the continuator from the map.
+  return 0;
+}
+
 int
 threadpool_task_continue (uint64_t uid)
 {
-  struct continuator_data *data = 0;
-  map_find_key (Continuators.map, &uid, threadpool_task_continuation_remove, &data);
-  if (!data)
+  if (!map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, 0))
   {
     errno = ETIMEDOUT;
     return EXIT_FAILURE;
   }
-  int ret = EXIT_SUCCESS;
-  if (!threadpool_create_task (data->threadpool, data->work, data->job.data, data->job.data_delete, 1)) // is_continuation = 1
-  {
-    fprintf (stderr, "%s: %s\n", __func__, _("Continuation failed."));
-    data->threadpool->nb_failed_tasks++;
-    if (data->job.data_delete)  // The job won't be processed : delete it.
-      data->job.data_delete (data->job.data);
-    ret = EXIT_FAILURE;
-  }
-  // Remove the asynchronous task (after the continuator has been converted into a task to keep threadpool_is_done_predicate true).
-  assert (data->threadpool->nb_async_tasks--);
-  // Broadcast (but not before the continuator has been converted into a task).
-  thrd_honored (cnd_broadcast (&data->threadpool->proceed_or_conclude_or_runoff));
-  return ret;
+  else
+    return EXIT_SUCCESS;
 }
 
 uint64_t
@@ -207,28 +212,30 @@ threadpool_task_continuation (int (*work) (struct threadpool *threadpool, void *
     return 0;
   }
 
-  struct continuator_data *data = calloc (1, sizeof (*data));
-  if (!data)
+  struct continuator_data *continuator = calloc (1, sizeof (*continuator));
+  if (!continuator)
   {
     fprintf (stderr, "%s: %s\n", __func__, _("Out of memory."));
     errno = ENOMEM;
     return 0;
   }
-  data->job = Worker_context.current_task->job;
-  data->work = work;
+  continuator->job = Worker_context.current_task->job;
+  continuator->work = work;
   struct timespec abs_timeout = delay_to_abs_timespec (seconds > 0 ? seconds : 0);      // from timers.h
-  data->threadpool = Worker_context.threadpool;
+  continuator->threadpool = Worker_context.threadpool;
   Worker_context.current_task->to_be_continued = 1;
   do
   {
-    data->uid = (uint64_t) (++seq ? seq : ++seq)        // Less significant (non null sequence)
+    continuator->uid = (uint64_t) (++seq ? seq : ++seq) // Less significant (non null sequence)
       + (((uint64_t) rand ()) << 32);   // Most significant (random)
   }
-  while (!map_insert_data (Continuators.map, data));
-  assert (data->uid != 0);      // Means it has not been continued yet.
-  data->timeout_timer = timer_set (abs_timeout, threadpool_task_continuation_timeout_handler, &data->uid);      // &uid is passed to the timer
-  data->threadpool->nb_async_tasks++;
-  return data->uid;
+  while (!map_insert_data (Continuators.map, continuator));     // continuator is inserted in the map.
+  uint64_t *p_uid = malloc (sizeof (*p_uid));
+  *p_uid = continuator->uid;    // p_uid will not fade out and will survive the continuator.
+  // p_uid will be passed to the timer handler threadpool_task_continuation_timeout_handler where it will be free'd.
+  continuator->timeout_timer = timer_set (abs_timeout, threadpool_task_continuation_timeout_handler, p_uid);
+  continuator->threadpool->nb_async_tasks++;
+  return continuator->uid;
 }
 
 // ================= Monitoring =================

@@ -138,8 +138,8 @@ wait (struct threadpool * /* tp */ , void *arg)
 static void
 monitor_handler (struct threadpool_monitor d, void *)
 {
-  fprintf (stdout, "t=%1$f s: %2$'zu workers have been active (over %3$'zu requested). %4$'zu virtual tasks have succeeded, %5$'zu have timed out (over %6$'zu submitted).\n",
-           d.time, d.workers.nb_max, d.workers.nb_requested, d.tasks.nb_succeeded, d.tasks.nb_failed, d.tasks.nb_submitted);
+  fprintf (stdout, "t=%6.2f s: %'zu workers. %'zu virtual tasks have succeeded, %'zu have timed out (over %'zu submitted).\n",
+           d.time, d.workers.nb_alive, d.tasks.nb_succeeded, d.tasks.nb_failed, d.tasks.nb_submitted);
 }
 
 #if 1
@@ -216,7 +216,7 @@ main (void)
         break;
       default:
     }
-    map_insert_data (li, "b");
+    map_insert_data (li, "b");  // The map stores pointers to static data of type char[].
     map_insert_data (li, "a");
     map_insert_data (li, "d");
     map_insert_data (li, "c");
@@ -230,6 +230,17 @@ main (void)
     fprintf (stdout, "\n");
     map_traverse_backward (li, print_data, 0);
     fprintf (stdout, "\n");
+
+    char *data;
+    if (map_traverse (li, MAP_REMOVE_FIRST, &data))     // Remove the first found element from the map.
+    {
+      fprintf (stdout, "%s <-- ", data);
+      map_traverse (li, print_data, 0);
+      fprintf (stdout, "<-- %s\n", data);
+      map_insert_data (li, data);       // Reinsert after use.
+      map_traverse (li, print_data, 0);
+      fprintf (stdout, "\n");
+    }
 
     map_find_key (li, "c", remove_all_data, 0);
     map_traverse (li, print_data, 0);
@@ -263,12 +274,17 @@ main (void)
     fprintf (stdout, "=======\n");
   }
 
+  fprintf (stdout, "Set\n");
+  void *timer = 0;
   for (size_t i = 0; i < 10; i++)
   {
     double *j = malloc (sizeof (*j));
-    timer_set (delay_to_abs_timespec ((*j = 1. * MAXDELAY * rand () / RAND_MAX)), done, j);
+    timer = timer_set (delay_to_abs_timespec ((*j = 1. * MAXDELAY * rand () / RAND_MAX)), done, j);
   }
-  sleep (MAXDELAY + 2);         // Wait for all timers to finish.
+  timer_unset (timer);
+  fprintf (stdout, "Wait\n");
+  sleep (MAXDELAY);             // Wait for all timers to finish.
+  fprintf (stdout, "=======\n");
 #endif
 #define getrlimit(resource) do { struct rlimit resource; getrlimit (RLIMIT_##resource, &resource); fprintf (stdout, "getrlimit (" #resource ") = %'jd\n", (intmax_t) resource.rlim_cur); } while (0)
   getrlimit (SIGPENDING);       // the number of timers is limited by the RLIMIT_SIGPENDING
@@ -278,4 +294,5 @@ main (void)
   for (size_t i = 0; i < NB_TIMERS; i++)
     threadpool_add_task (tp, wait, job_create (1. * MAXDELAY * rand () / RAND_MAX), job_delete);
   threadpool_wait_and_destroy (tp);
+  fprintf (stdout, "=======\n");
 }

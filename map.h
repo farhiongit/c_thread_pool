@@ -57,12 +57,31 @@ typedef int (*map_operator) (void *data, void *context, int *remove);
 
 // If 'get_key' and 'cmp_key' are not null, applies 'operator' on the data of the elements in the map that matches the key (for which 'cmp_key' returns 0), as long as 'op' returns non-zero.
 // 'context' is passed as the second argument of operator 'op'.
+// Returns the number of elements on which the operator 'op' has been applied.
 // Complexity : log n (see (*)) -- MT-safe
-void map_find_key (struct map *l, const void *key, map_operator op, void *context);
+size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
 
 // Applies 'operator' on all the data stored in the map as long as 'op' returns non-zero, from the first element to the last or the other way round.
 // 'context' is passed as the second argument of operator 'op'.
+// Returns the number of elements on which the operator 'op' has been applied.
 // Complexity : n * log n (see (*)) -- MT-safe
-void map_traverse (map *, map_operator op, void *context);
-void map_traverse_backward (map *, map_operator op, void *context);
+size_t map_traverse (map *, map_operator op, void *context);
+size_t map_traverse_backward (map *, map_operator op, void *context);
+
+// If the parameter context of 'map_find_key', 'map_traverse' or 'map_traverse_backward' is a pointer,
+// the helper operator 'MAP_REMOVE_FIRST' removes and retrieves the first element found by 'map_find_key', 'map_traverse' or 'map_traverse_backward'
+// and sets the pointer 'context' to the data of this element.
+// 'context' SHOULD BE the address of a pointer to type T, where 'context' is the argument passed to 'map_find_key', 'map_traverse' or 'map_traverse_backward'.
+/* Example
+If m is of map of elements of type T:
+  T *data = 0;
+  if (map_traverse (m, MAP_REMOVE_FIRST, &data))
+  {
+    // 'data' can thread-safely be used to work with.
+    ...
+    // If needed, it can be reinserted in the map after use:
+    map_insert_data (m, data);
+  }
+*/
+int MAP_REMOVE_FIRST (void *data, void *res, int *remove);
 #endif
