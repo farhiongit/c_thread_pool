@@ -12,7 +12,7 @@ all: run_examples
 
 .PHONY: help
 help:
-	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, README.html, <language>/LC_MESSAGES/libwqm.mo"
+	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, cloc, README.html or <language>/LC_MESSAGES/libwqm.mo"
 
 #### Examples
 .PHONY: run_examples
@@ -77,6 +77,10 @@ examples/timers/timers: examples/timers/timers.c
 .PHONY: callgraph
 callgraph:
 	@cflow -fposix -n --main threadpool_create_and_start --main threadpool_add_task --main threadpool_cancel_task --main threadpool_wait_and_destroy --main threadpool_task_continuation --main threadpool_task_continue wqm.c | grep -v '<>'
+
+.PHONY: cloc
+cloc: map.h map.c timer.h timer.c wqm.h wqm.c
+	cloc --quiet --hide-rate --by-file $^
 
 .PHONY: libs
 libs: libmap.a libmap.so libtimer.a libtimer.so libwqm.a libwqm.so
