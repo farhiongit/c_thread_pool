@@ -4,8 +4,7 @@
 // Language: C (C11 or higher)
 #ifndef  __MAP_H__
 #  define __MAP_H__
-typedef struct map map;
-typedef struct map_elem map_elem;
+typedef struct map map;         // A map (internally modeled as a sorted binary tree).
 
 // ## Creates a new map.
 // The type of the user-defined function that should return a pointer to the the part of `data` that contains the key of the map.
@@ -33,19 +32,19 @@ extern int MAP_UNIQUENESS;      // The second data is not inserted.
 extern int MAP_STABLE;          // The second data is inserted AFTER the first data with the identical key.
 extern int MAP_NONE;            // The second data is inserted either (randomly) before or after the first data with the identical key (keeps the binary tree more balanced).
 
-const void *MAP_KEY_IS_DATA (void *data);       // Helper function to be used as a key extractor for sets and ordered lists (see below). Returns `data`.
+extern map_key_extractor MAP_KEY_IS_DATA;       // Helper function to be used as a key extractor for sets and ordered lists (see below).
 
 /* 7 possible uses:
 
-| Use            | Property             | `get_key`         | Comment                                                                                                |
-| -              | -                    | -                 | -                                                                                                      |
-| Map            | `MAP_UNIQUENESS`     | Non-zero          | Elements are unique. `get_key` and `cmp_key` must be set.                                              |
-| Dictionary     | not `MAP_UNIQUENESS` | Non-zero          | Elements are not unique. `get_key` and `cmp_key` must be set.                                          |
-| Set            | `MAP_UNIQUENESS`     | `MAP_KEY_IS_DATA` | Elements are unique. `cmp_key` must be set.                                                            |
-| Ordered list   | `MAP_STABLE`         | `MAP_KEY_IS_DATA` | Equal elements are ordered in the order they were inserted. `cmp_key` must be set.                     |
-| Unordered list | `MAP_NONE`           | `0`               | `cmp_key` must be 0 as well.                                                                           |
-| FIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_remove (map_first (map *))` to remove elements. |
-| LIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_remove (map_last (map *))` to remove elements.  |
+| Use            | Property             | `get_key`         | Comment                                                                                                                    |
+| -              | -                    | -                 | -                                                                                                                          |
+| Ordered map    | `MAP_UNIQUENESS`     | Non-zero          | Each key is unique in the map. `get_key` and `cmp_key` must be set.                                                        |
+| Dictionary     | not `MAP_UNIQUENESS` | Non-zero          | Keys can have multiple entries in the map. `get_key` and `cmp_key` must be set.                                            |
+| Set            | `MAP_UNIQUENESS`     | `MAP_KEY_IS_DATA` | Elements are unique. `cmp_key` must be set.                                                                                |
+| Ordered list   | `MAP_STABLE`         | `MAP_KEY_IS_DATA` | Equal elements are ordered in the order they were inserted. `cmp_key` must be set.                                         |
+| Unordered list | `MAP_NONE`           | `0`               | `cmp_key` must be 0 as well.                                                                                               |
+| FIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse (m, MAP_REMOVE, sel, &data)` to remove an element.         |
+| LIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse_backward (m, MAP_REMOVE, sel, &data)` to remove an element.|
 
 (*) If `cmp_key` or `get_key` is `0` and property is `MAP_STABLE`, complexity is reduced by a factor log n.
 
@@ -96,21 +95,23 @@ size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *co
 // Complexity : n * log n (see (*)). MT-safe. Non-recursive.
 
 // ### Helper map operator to retrieve an element.
-int MAP_REMOVE_FIRST (void *data, void *res, int *remove);
-// If the parameter context of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
-// the helper operator `MAP_REMOVE_FIRST` removes and retrieves the first element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
-// and sets the pointer `context` to the data of this element.
+extern map_operator MAP_REMOVE;
+// If the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
+// the helper operator `MAP_REMOVE` removes and retrieves the first element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
+// and sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
 // `context` SHOULD BE the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
 /* Example
 If `m` is of map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
 
-  T *data = 0;
-  if (map_traverse (m, MAP_REMOVE_FIRST, sel, &data))
+  T \*data = 0;  // `data` is a *pointer* to the type stored in the map.
+  if (map_traverse (m, MAP_REMOVE, sel, &data))  // A *pointer to the pointer* `data` is passed to map_traverse.
   {
+
     // `data` can thread-safely be used to work with.
     ...
-    // If needed, it can be reinserted in the map after use:
+    // If needed, it can be reinserted in the map after use.
     map_insert_data (m, data);
+
   }
 */
 #endif

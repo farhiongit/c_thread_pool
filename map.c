@@ -127,7 +127,7 @@ _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel
   }
   mtx_lock (&m->mutex);
   size_t nb_op = 0;
-  for (map_elem * e = backward ? m->last : m->first; e;)
+  for (struct map_elem * e = backward ? m->last : m->first; e;)
   {
     int remove = 0;
     int go_on = 1;
@@ -136,7 +136,7 @@ _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel
       go_on = op (e->data, res, &remove);
       nb_op++;
     }
-    map_elem *n = backward ? _map_previous (e) : _map_next (e);
+    struct map_elem *n = backward ? _map_previous (e) : _map_next (e);
     if (remove)
       _map_remove (e);
     if (!go_on)
@@ -186,11 +186,13 @@ map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key
   return l;
 }
 
-const void *
-MAP_KEY_IS_DATA (void *data)
+static const void *
+_MAP_KEY_IS_DATA (void *data)
 {
   return data;
 }
+
+map_key_extractor MAP_KEY_IS_DATA = _MAP_KEY_IS_DATA;
 
 int
 map_destroy (struct map *l)
@@ -327,10 +329,12 @@ map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, 
   return nb_op;
 }
 
-int
-MAP_REMOVE_FIRST (void *data, void *res, int *remove)
+static int
+_MAP_REMOVE (void *data, void *res, int *remove)
 {
   *(void **) res = data;        // *res is supposed to be a pointer here.
   *remove = 1;
   return 0;
 }
+
+map_operator MAP_REMOVE = _MAP_REMOVE;

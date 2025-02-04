@@ -12,7 +12,7 @@ all: run_examples
 
 .PHONY: help
 help:
-	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, cloc, README.html or <language>/LC_MESSAGES/libwqm.mo"
+	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, cloc, doc or <language>/LC_MESSAGES/libwqm.mo"
 
 #### Examples
 .PHONY: run_examples
@@ -118,7 +118,14 @@ po/libwqm.pot: wqm.c
 	mkdir -p "$(dir $@)"
 	xgettext -o "$@" -LC -k_ -i --package-name=libwqm --no-wrap --no-location -- "$^"
 
-#### README to html
-README.html: README.md
+#### Documentation
+.PHONY: doc
+doc: README.html README_map.html
+
+README_map.md: map.h
+	chmod +x ./h2md.ksh
+	./h2md.ksh < "$^" >| "$@"
+
+%.html: %.md
 	pandoc -f markdown -- "$^" > "$@"
 

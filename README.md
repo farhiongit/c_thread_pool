@@ -95,15 +95,15 @@ Those features are detailed below.
 
 This implementation of a thread pool brings unique features, not found anywhere else at the time of writing.
 
-1. It uses the standard (minimalist) C11 thread library <threads.h>, rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
-1. The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user defined function `job_delete ()`), allowing collecting data at task termination.
-1. Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
-1. Local data can be defined  (via `threadpool_set_worker_local_data_manager ()`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
-1. Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager ()`) and accessed (via `threadpool_global_resource ()`) for the thread pool.
-1. Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
-1. The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
-1. Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
-1. The thread pool can wait for asynchronous calls without blocking workers (via `threadpool_task_continuation ()` and `threadpool_task_continue ()`).
+1. **Standard C:** It uses the standard (minimalist) C11 thread library <threads.h>, rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
+1. **Data management:** The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user-defined function `job_delete ()`), allowing collecting data at task termination.
+1. **Global data management:** Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
+1. **Worker data management:** Local data can be defined  (via `threadpool_set_worker_local_data_manager ()`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. **Resource management:** Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager ()`) and accessed (via `threadpool_global_resource ()`) for the thread pool.
+1. **Worker life-time management:** Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
+1. **Monitoring facility:** The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
+1. **Task cancellation:** Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
+1. **Virtual tasks:** The thread pool can wait for asynchronous calls without blocking workers (via `threadpool_task_continuation ()` and `threadpool_task_continue ()`).
 
 Those features are detailed below.
 

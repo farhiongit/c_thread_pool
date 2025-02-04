@@ -23,7 +23,7 @@
 #define map_find_key(...)          TRACE_EXPRESSION(map_find_key (__VA_ARGS__))
 #define map_traverse_backward(...) TRACE_EXPRESSION(map_traverse_backward (__VA_ARGS__))
 
-#define NB_TIMERS (300 * 1000)
+#define NB_TIMERS (10 * 1000)
 #define MAXDELAY (2.)
 #define TIMEOUT (0.9 * (MAXDELAY))      // Timeout (seconds) (shortened a little bit, for the purpose of the example.)
 //#define SIGTIMER SIGUSR1        // POSIX signal based timer. Seems to be limited by the OS.
@@ -241,7 +241,7 @@ main (void)
     fprintf (stdout, "\n");
 
     char *data;
-    if (map_traverse (li, MAP_REMOVE_FIRST, 0, &data))  // Remove the first found element from the map.
+    if (map_traverse (li, MAP_REMOVE, 0, &data))        // Remove the first found element from the map.
     {
       fprintf (stdout, "%s <-- ", data);
       map_traverse (li, print_data, 0, 0);
