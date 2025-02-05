@@ -176,6 +176,28 @@ Destroys an EMPTY and previously created map. Returns `EXIT_FAILURE` (and `errno
 
 
 
+## Retrieve the number of elements in a map.
+
+
+
+      size_t map_size (map *);
+
+Returns the number of elements in a map.
+
+
+
+
+Note: if the map is used by several threads, `map_size` should better not be used since the size of the map can be modified any time.
+
+
+
+
+Complexity : 1. MT-safe.
+
+
+
+
+
 ## Add an element into a map.
 
 
@@ -355,7 +377,7 @@ and sets the pointer `context` to the data of this element. Otherwise `context` 
 
 
 Example
-If `m` is of map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
+If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
 
  T \*data = 0;  // `data` is a *pointer* to the type stored in the map.
 

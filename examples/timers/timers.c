@@ -232,6 +232,7 @@ main (void)
     map_insert_data (li, "aa");
     map_insert_data (li, "cc");
     map_insert_data (li, "d");
+    fprintf (stdout, "%lu elements.\n", map_size (li));
 
     map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
@@ -254,6 +255,7 @@ main (void)
     map_find_key (li, "c", remove_all_data, 0);
     map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
+    fprintf (stdout, "%lu elements.\n", map_size (li));
 
     map_traverse (li, remove_one_data, 0, 0);
     map_traverse (li, print_data, 0, 0);
@@ -278,6 +280,7 @@ main (void)
     map_traverse (li, remove_all_data, 0, 0);
     map_traverse (li, print_data, 0, 0);
     fprintf (stdout, "\n");
+    fprintf (stdout, "%lu elements.\n", map_size (li));
     map_traverse (li, remove_all_data, 0, 0);
     map_destroy (li);
     fprintf (stdout, "=======\n");

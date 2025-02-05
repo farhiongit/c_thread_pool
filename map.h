@@ -54,6 +54,12 @@ extern map_key_extractor MAP_KEY_IS_DATA;       // Helper function to be used as
 int map_destroy (map *);
 // Destroys an EMPTY and previously created map. Returns `EXIT_FAILURE` (and `errno` set to `EPERM`) if the map is not empty (and the map is NOT destroyed), `EXIT_SUCCESS` otherwise.
 
+// ## Retrieve the number of elements in a map.
+size_t map_size (map *);
+// Returns the number of elements in a map.
+// Note: if the map is used by several threads, `map_size` should better not be used since the size of the map can be modified any time.
+// Complexity : 1. MT-safe.
+
 // ## Add an element into a map.
 int map_insert_data (map *, void *data);
 // Adds a previously allocated data into map and returns `1` if the element was added, `0` otherwise.
@@ -101,7 +107,7 @@ extern map_operator MAP_REMOVE;
 // and sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
 // `context` SHOULD BE the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
 /* Example
-If `m` is of map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
+If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
 
   T \*data = 0;  // `data` is a *pointer* to the type stored in the map.
   if (map_traverse (m, MAP_REMOVE, sel, &data))  // A *pointer to the pointer* `data` is passed to map_traverse.

@@ -8,7 +8,7 @@ LDFLAGS=
 #VALGRIND=valgrind --leak-check=full
 
 .PHONY: all
-all: run_examples
+all: doc run_examples
 
 .PHONY: help
 help:

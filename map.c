@@ -27,6 +27,7 @@ struct map
   const void *(*get_key) (void *);
   void *arg;
   int uniqueness, stable;       // Properties.
+  size_t nb_elem;
 };
 
 static void *
@@ -78,6 +79,7 @@ _map_remove (struct map_elem *old)
   else                          // (e == e->upper->ge)
     e->upper->ge = child;
 
+  l->nb_elem--;
   void *data = e->data;
   free (e);
   return data;
@@ -237,7 +239,7 @@ map_insert_data (struct map *l, void *data)
   mtx_lock (&l->mutex);
   struct map_elem *upper;
   int cmp;
-  int ret = 1;
+  unsigned int ret = 1;
   if (!(upper = l->root))
     l->root = l->first = l->last = new;
   else if (!l->cmp_key && l->stable)
@@ -273,8 +275,9 @@ map_insert_data (struct map *l, void *data)
           l->last = new;
         break;
       }
+  l->nb_elem += ret;
   mtx_unlock (&l->mutex);
-  return ret;
+  return (int) ret;
 }
 
 size_t
@@ -338,3 +341,12 @@ _MAP_REMOVE (void *data, void *res, int *remove)
 }
 
 map_operator MAP_REMOVE = _MAP_REMOVE;
+
+size_t
+map_size (map *m)
+{
+  mtx_lock (&m->mutex);
+  size_t ret = m->nb_elem;
+  mtx_unlock (&m->mutex);
+  return ret;
+}
