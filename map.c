@@ -335,8 +335,16 @@ map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, 
 static int
 _MAP_REMOVE (void *data, void *res, int *remove)
 {
-  *(void **) res = data;        // *res is supposed to be a pointer here.
-  *remove = 1;
+  if (!res)
+  {
+    fprintf (stderr, "%s: %s\n", "MAP_REMOVE", "Context must not be a null pointer.");
+    errno = EINVAL;
+  }
+  else
+  {
+    *(void **) res = data;      // *res is supposed to be a pointer here.
+    *remove = 1;
+  }
   return 0;
 }
 
