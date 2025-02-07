@@ -242,7 +242,7 @@ main (void)
     fprintf (stdout, "\n");
 
     char *data = 0;
-    if (map_traverse (li, MAP_REMOVE, 0, &data))        // Remove the first found element from the map.
+    if (map_traverse (li, MAP_REMOVE, 0, &data) && data)        // Remove the first found element from the map.
     {
       fprintf (stdout, "%s <-- ", data);
       map_traverse (li, print_data, 0, 0);

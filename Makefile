@@ -127,5 +127,5 @@ README_map.md: map.h
 	./h2md.ksh < "$^" >| "$@"
 
 %.html: %.md
-	pandoc -f markdown -- "$^" > "$@"
+	pandoc -f markdown -- "$^" > "$@" || :
 

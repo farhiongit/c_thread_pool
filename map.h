@@ -110,7 +110,7 @@ extern map_operator MAP_REMOVE;
 If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
 
   T \*data = 0;  // `data` is a *pointer* to the type stored in the map.
-  if (map_traverse (m, MAP_REMOVE, sel, &data))  // A *pointer to the pointer* `data` is passed to map_traverse.
+  if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
   {
 
     // `data` can thread-safely be used to work with.
