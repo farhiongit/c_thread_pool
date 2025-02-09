@@ -29,6 +29,8 @@
 
 typeset -i comment=0
 typeset -i endcomment=0
+typeset -i newpar=0
+typeset -i verbatim=0
 preline=
 while IFS= read -r newline ; do
   preline="$preline${newline%"\\"}"
@@ -40,6 +42,12 @@ while IFS= read -r newline ; do
   fi
   if (( comment )) && [[ "$line" == *(\s) ]] ; then
     print
+    newpar=1
+    verbatim=0
+  fi
+  if (( comment )) && (( newpar )) && [[ "$line" == +(\s)!(\s)* ]] ; then
+    newpar=0
+    verbatim=1
   fi
   while ! [[ "$line" == *(\s) ]] ; do
           if ! (( comment )) && [[ "$line" == *"/*"*"*/"* ]] ; then
@@ -47,7 +55,7 @@ while IFS= read -r newline ; do
             a="${a%%"*/"*}"
             #a="${a//"."+(\s)/".\n\n"}"
             a="${a/%"."*(\s)/".\n"}"
-            print -- "\n${a#+( )}\n"
+            print -- "\n${a#+(\s)}\n"
             code="$code ${line%%"/*"*}"
             line="${line#*"*/"}"
           elif ! (( comment )) && [[ "$line" == *"/*"* ]] ; then
@@ -55,28 +63,36 @@ while IFS= read -r newline ; do
             a="${line#*"/*"}"
             #a="${a//"."+(\s)/".\n\n"}"
             a="${a/%"."*(\s)/".\n"}"
-            print -- "\n${a#+( )}"
+            print -- "\n${a#+(\s)}"
             code="$code${line%%"/*"*}"
             line=""
           elif (( comment )) && [[ "$line" == *"*/"* ]] ; then
             comment=0
             a="${line%%"*/"*}"
             #a="${a//"."+(\s)/".\n\n"}"
-            a="${a/%"."*(\s)/".\n"}"
-            print -- "${a#+( )}\n"
+            if ! (( verbatim )) ; then
+                    a="${a/%"."*(\s)/".\n"}"
+                    print -- "${a#+(\s)}\n"
+            else
+                    print -n -- "\t" ; print -r -- "${a%%+(\s)}"
+            fi
             line="${line#*"*/"}"
             code="$code "
           elif (( comment )) ; then
             a="$line"
             #a="${a//"."+(\s)/".\n\n"}"
-            a="${a/%"."*(\s)/".\n"}"
-            print -- "${a#+( )}"
+            if ! (( verbatim )) ; then
+                    a="${a/%"."*(\s)/".\n"}"
+                    print -- "${a#+(\s)}"
+            else
+                    print -n -- "\t" ; print -r -- "${a%%+(\s)}"
+            fi
             line=""
           elif ! (( comment )) && [[ "$line" == *"//"* ]] ; then
             a="${line#*"//"}"
             #a="${a//"."+(\s)/".\n\n"}"
             a="${a/%"."*(\s)/".\n"}"
-            print -- "\n${a#+( )}\n"
+            print -- "\n${a#+(\s)}\n"
             code="$code${line%%"//"*}"
             line=""
           else
@@ -102,7 +118,7 @@ while IFS= read -r newline ; do
     code="${code%";"*(\s)}"
     print -- "\n| Type definition |\n| - |\n| $code |\n"
   elif [[ "$code" != *(\s) ]] ; then
-    print -- "      $code"
+    print -n -- "\t" ; print -r -- "$code"
   elif ! (( comment )) ; then
     print
   fi

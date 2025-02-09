@@ -111,8 +111,8 @@ Those features are detailed below.
 
 - `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface (see [README](README_map.md)).
 - `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
-- `trace.h` permits to globally trace calls to a function without changing the code.
-- `h2md.ksh` converts a header file (with comments) into a markdown file (see [map.h](map.h) and [README_map.md](README_map.md)).
+- `trace.h` permits to globally trace calls to a function without changing the code (see [README](README_trace.md)).
+- `h2md.ksh` converts header files with comments ([map.h](map.h) and [trace.h](trace.h)) into markdown files ([README_map.md](README_map.md) and [README_trace.md](README_trace.md)).
 
 ## Detailed API
 

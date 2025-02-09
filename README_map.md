@@ -65,7 +65,7 @@ if the first argument is considered to be respectively less than, equal to, or g
 | int (\*map\_key\_comparator) (const void \*key\_a, const void \*key\_b, void \*arg) |
 
 
-      map *map_create (map_key_extractor get_key, map_key_comparator cmp_key, void *arg, int property);
+	map *map_create (map_key_extractor get_key, map_key_comparator cmp_key, void *arg, int property);
 
 Returns `0` if the map could not be allocated (and `errno` set to `ENOMEM`).
 
@@ -125,23 +125,23 @@ Equal elements are ordered in the order they were inserted if and only if `prope
 The second data is not inserted.
 
 
-      extern int MAP_UNIQUENESS;      
+	extern int MAP_UNIQUENESS;      
 
 The second data is inserted AFTER the first data with the identical key.
 
 
-      extern int MAP_STABLE;          
+	extern int MAP_STABLE;          
 
 The second data is inserted either (randomly) before or after the first data with the identical key (keeps the binary tree more balanced).
 
 
-      extern int MAP_NONE;            
+	extern int MAP_NONE;            
 
 
 Helper function to be used as a key extractor for sets and ordered lists (see below).
 
 
-      extern map_key_extractor MAP_KEY_IS_DATA;       
+	extern map_key_extractor MAP_KEY_IS_DATA;       
 
 
 7 possible uses:
@@ -168,7 +168,7 @@ Helper function to be used as a key extractor for sets and ordered lists (see be
 
 
 
-      int map_destroy (map *);
+	int map_destroy (map *);
 
 Destroys an EMPTY and previously created map. Returns `EXIT_FAILURE` (and `errno` set to `EPERM`) if the map is not empty (and the map is NOT destroyed), `EXIT_SUCCESS` otherwise.
 
@@ -180,7 +180,7 @@ Destroys an EMPTY and previously created map. Returns `EXIT_FAILURE` (and `errno
 
 
 
-      size_t map_size (map *);
+	size_t map_size (map *);
 
 Returns the number of elements in a map.
 
@@ -202,7 +202,7 @@ Complexity : 1. MT-safe.
 
 
 
-      int map_insert_data (map *, void *data);
+	int map_insert_data (map *, void *data);
 
 Adds a previously allocated data into map and returns `1` if the element was added, `0` otherwise.
 
@@ -296,7 +296,7 @@ Should return `1` if the operator should be applied on other elements of the map
 
 
 
-      size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
+	size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
 
 If `get_key` and `cmp_key` are not null, applies `operator` on the data of the elements in the map that matches the key (for which `cmp_key` returns `0`), as long as `op` returns non-zero.
 
@@ -323,8 +323,8 @@ Complexity : log n (see (*)). MT-safe. Non-recursive.
 
 
 
-      size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
-      size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *context);
+	size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
+	size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *context);
 
 Applies the operator `op` on all the data stored in the map as long as the operator `op` returns non-zero, from the first element to the last or the other way round.
 
@@ -356,7 +356,7 @@ Complexity : n * log n (see (*)). MT-safe. Non-recursive.
 
 
 
-      extern map_operator MAP_REMOVE;
+	extern map_operator MAP_REMOVE;
 
 If the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
 
@@ -376,24 +376,17 @@ and sets the pointer `context` to the data of this element. Otherwise `context` 
 
 
 
-Example
+#### Example
+
 If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
 
- T \*data = 0;  // `data` is a *pointer* to the type stored in the map.
-
- if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
-
- {
-
-   // `data` can thread-safely be used to work with.
-
-   ...
-
-   // If needed, it can be reinserted in the map after use.
-
-   map_insert_data (m, data);
-
- }
-
-
+	  T *data = 0;  // `data` is a *pointer* to the type stored in the map.
+	  if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
+	  {
+	    // `data` can thread-safely be used to work with.
+	    ...
+	    // If needed, it can be reinserted in the map after use.
+	    map_insert_data (m, data);
+	  }
+	
 

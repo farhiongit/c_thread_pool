@@ -106,18 +106,17 @@ extern map_operator MAP_REMOVE;
 // the helper operator `MAP_REMOVE` removes and retrieves the first element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
 // and sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
 // `context` SHOULD BE the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
-/* Example
+/* #### Example
+
 If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
 
-  T \*data = 0;  // `data` is a *pointer* to the type stored in the map.
+  T *data = 0;  // `data` is a *pointer* to the type stored in the map.
   if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
   {
-
     // `data` can thread-safely be used to work with.
     ...
     // If needed, it can be reinserted in the map after use.
     map_insert_data (m, data);
-
   }
 */
 #endif
