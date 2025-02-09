@@ -101,22 +101,31 @@ while IFS= read -r newline ; do
           fi
   done
   if [[ "$code" == "#"*(\s)"include"+(\s)* ]] ; then
+    code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
-    print -- "\n| Include |\n| - |\n|${code#"#"*(\s)"include"+(\s)} |\n"
+    print -n -- "\n| Include |\n| - |\n| "
+    print -n -r -- "${code#"#"*(\s)"include"+(\s)}"
+    print -- " |\n"
   elif [[ "$code" == "#"*(\s)"define"+(\s)* ]] ; then
+    code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
     code="${code#"#"*(\s)"define"+(\s)}"
-    print -- "\n| Define | Value |\n| - | - |\n| ${code/+(\s)/" | "} |\n"
+    print -n -- "\n| Define | Value |\n| - | - |\n| "
+    print -n -r -- "${code/+(\s)/" | "}"
+    print -- " |\n"
   elif [[ "$code" == "#"* ]] ; then
     ;
   elif [[ "$code" == *(\s)"typedef"+(\s)* ]] ; then
+    code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
     code="${code#*(\s)"typedef"+(\s)}"
     code="${code%";"*(\s)}"
-    print -- "\n| Type definition |\n| - |\n| $code |\n"
+    print -n -- "\n| Type definition |\n| - |\n| "
+    print -r -n -- "$code"
+    print -- " |\n"
   elif [[ "$code" != *(\s) ]] ; then
     print -n -- "\t" ; print -r -- "$code"
   elif ! (( comment )) ; then

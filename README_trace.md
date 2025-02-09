@@ -10,18 +10,17 @@
 
 | Include |
 | - |
-|<stdio.h> |
+| <stdio.h> |
 
 
 | Include |
 | - |
-|<threads.h> |
+| <threads.h> |
 
 
 | Define | Value |
 | - | - |
-| TRACE(text) | fprintf (stderr, "[%lX:%s] %s <%s:%d>
-", thrd\_current(), \_\_func\_\_, (text), \_\_FILE\_\_, \_\_LINE\_\_) |
+| TRACE(text) | fprintf (stderr, "[%lX:%s] %s <%s:%d>\\n", thrd\_current(), \_\_func\_\_, (text), \_\_FILE\_\_, \_\_LINE\_\_) |
 
 
 | Define | Value |
@@ -31,8 +30,7 @@
 
 | Define | Value |
 | - | - |
-| TRACE\_FORMAT(...) | do { fprintf (stderr, "[%lX:%s] ", thrd\_current(), \_\_func\_\_) ; fprintf (stderr, \_\_VA\_ARGS\_\_) ; fprintf (stderr, " <%s:%d>
-", \_\_FILE\_\_, \_\_LINE\_\_); } while (0) |
+| TRACE\_FORMAT(...) | do { fprintf (stderr, "[%lX:%s] ", thrd\_current(), \_\_func\_\_) ; fprintf (stderr, \_\_VA\_ARGS\_\_) ; fprintf (stderr, " <%s:%d>\\n", \_\_FILE\_\_, \_\_LINE\_\_); } while (0) |
 
 
 
