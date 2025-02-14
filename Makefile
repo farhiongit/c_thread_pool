@@ -125,8 +125,8 @@ doc: README.html README_map.html README_trace.html
 
 .SECONDARY: README_map.md README_trace.md
 README_%.md: %.h
-	chmod +x ./h2md.ksh
-	./h2md.ksh < "$^" >| "$@"
+	chmod +x ./h2md
+	./h2md < "$^" >| "$@"
 
 %.html: %.md
 	pandoc -f markdown -- "$^" > "$@" || :

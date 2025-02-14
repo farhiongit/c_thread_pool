@@ -1,18 +1,19 @@
-#!/bin/ksh
+#!/bin/bash
+shopt -s extglob
 # Convert a header file into a markdown file.
 # Lines ending with '\' are aggregated before parsing.
 # A comment starting on the same line as a piece of code is related to this code and should be printed out BEFORE that code and followed by ':'.
-# Code and comments are trimed of leading and trailing spaces.
-# A comment ending with '.' is prined out followed by an empty line (md feature).
+# Code and comments are trimmed of leading and trailing spaces.
+# A comment ending with '.' is printed out followed by an empty line (md feature).
 # Pieces of code are aggregated into code statements.
 # A code statement is printed out preceded by '> ' (md feature).
 
 # Text: concatenate a line ending with '\' with the next line.
 
 # Pre-processor: lines starting with '#'.
-# Pre-processor: "^#*(\s)define*\n".
-# Pre-processor: "^#*(\s)include*\n".
-# Pre-processor: ignore "^#*(\s)\n".
+# Pre-processor: "^#*([[:blank:]])define*\n".
+# Pre-processor: "^#*([[:blank:]])include*\n".
+# Pre-processor: ignore "^#*([[:blank:]])\n".
 # Pre-processor: a comment is replaced by ' '.
 # Pre-processor: trim leading and trailing spaces.
 
@@ -40,59 +41,59 @@ while IFS= read -r newline ; do
     line="$preline"
     preline=
   fi
-  if (( comment )) && [[ "$line" == *(\s) ]] ; then
-    print
+  if (( comment )) && [[ "$line" == *([[:blank:]]) ]] ; then
+    echo
     newpar=1
     verbatim=0
   fi
-  if (( comment )) && (( newpar )) && [[ "$line" == +(\s)!(\s)* ]] ; then
+  if (( comment )) && (( newpar )) && [[ "$line" == +([[:blank:]])!([[:blank:]])* ]] ; then
     newpar=0
     verbatim=1
   fi
-  while ! [[ "$line" == *(\s) ]] ; do
+  while ! [[ "$line" == *([[:blank:]]) ]] ; do
           if ! (( comment )) && [[ "$line" == *"/*"*"*/"* ]] ; then
             a="${line#*"/*"}"
             a="${a%%"*/"*}"
-            #a="${a//"."+(\s)/".\n\n"}"
-            a="${a/%"."*(\s)/".\n"}"
-            print -- "\n${a#+(\s)}\n"
+            #a="${a//"."+([[:blank:]])/".\n\n"}"
+            a="${a/%"."*([[:blank:]])/".\n"}"
+            echo -e "\n${a#+([[:blank:]])}\n"
             code="$code ${line%%"/*"*}"
             line="${line#*"*/"}"
           elif ! (( comment )) && [[ "$line" == *"/*"* ]] ; then
             comment=1
             a="${line#*"/*"}"
-            #a="${a//"."+(\s)/".\n\n"}"
-            a="${a/%"."*(\s)/".\n"}"
-            print -- "\n${a#+(\s)}"
+            #a="${a//"."+([[:blank:]])/".\n\n"}"
+            a="${a/%"."*([[:blank:]])/".\n"}"
+            echo -e "\n${a#+([[:blank:]])}"
             code="$code${line%%"/*"*}"
             line=""
           elif (( comment )) && [[ "$line" == *"*/"* ]] ; then
             comment=0
             a="${line%%"*/"*}"
-            #a="${a//"."+(\s)/".\n\n"}"
+            #a="${a//"."+([[:blank:]])/".\n\n"}"
             if ! (( verbatim )) ; then
-                    a="${a/%"."*(\s)/".\n"}"
-                    print -- "${a#+(\s)}\n"
+                    a="${a/%"."*([[:blank:]])/".\n"}"
+                    echo -e "${a#+([[:blank:]])}\n"
             else
-                    print -n -- "\t" ; print -r -- "${a%%+(\s)}"
+                    echo -n -e "\t" ; echo -E "${a%%+([[:blank:]])}"
             fi
             line="${line#*"*/"}"
             code="$code "
           elif (( comment )) ; then
             a="$line"
-            #a="${a//"."+(\s)/".\n\n"}"
+            #a="${a//"."+([[:blank:]])/".\n\n"}"
             if ! (( verbatim )) ; then
-                    a="${a/%"."*(\s)/".\n"}"
-                    print -- "${a#+(\s)}"
+                    a="${a/%"."*([[:blank:]])/".\n"}"
+                    echo -e "${a#+([[:blank:]])}"
             else
-                    print -n -- "\t" ; print -r -- "${a%%+(\s)}"
+                    echo -n -e "\t" ; echo -E "${a%%+([[:blank:]])}"
             fi
             line=""
           elif ! (( comment )) && [[ "$line" == *"//"* ]] ; then
             a="${line#*"//"}"
-            #a="${a//"."+(\s)/".\n\n"}"
-            a="${a/%"."*(\s)/".\n"}"
-            print -- "\n${a#+(\s)}\n"
+            #a="${a//"."+([[:blank:]])/".\n\n"}"
+            a="${a/%"."*([[:blank:]])/".\n"}"
+            echo -e "\n${a#+([[:blank:]])}\n"
             code="$code${line%%"//"*}"
             line=""
           else
@@ -100,36 +101,36 @@ while IFS= read -r newline ; do
             line=""
           fi
   done
-  if [[ "$code" == "#"*(\s)"include"+(\s)* ]] ; then
+  if [[ "$code" == "#"*([[:blank:]])"include"+([[:blank:]])* ]] ; then
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
-    print -n -- "\n| Include |\n| - |\n| "
-    print -n -r -- "${code#"#"*(\s)"include"+(\s)}"
-    print -- " |\n"
-  elif [[ "$code" == "#"*(\s)"define"+(\s)* ]] ; then
+    echo -n -e "\n| Include |\n| - |\n| "
+    echo -n -E "${code#"#"*([[:blank:]])"include"+([[:blank:]])}"
+    echo -e " |\n"
+  elif [[ "$code" == "#"*([[:blank:]])"define"+([[:blank:]])* ]] ; then
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
-    code="${code#"#"*(\s)"define"+(\s)}"
-    print -n -- "\n| Define | Value |\n| - | - |\n| "
-    print -n -r -- "${code/+(\s)/" | "}"
-    print -- " |\n"
+    code="${code#"#"*([[:blank:]])"define"+([[:blank:]])}"
+    echo -n -e "\n| Define | Value |\n| - | - |\n| "
+    echo -n -E "${code/+([[:blank:]])/" | "}"
+    echo -e " |\n"
   elif [[ "$code" == "#"* ]] ; then
-    ;
-  elif [[ "$code" == *(\s)"typedef"+(\s)* ]] ; then
+    :
+  elif [[ "$code" == *([[:blank:]])"typedef"+([[:blank:]])* ]] ; then
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
-    code="${code#*(\s)"typedef"+(\s)}"
-    code="${code%";"*(\s)}"
-    print -n -- "\n| Type definition |\n| - |\n| "
-    print -r -n -- "$code"
-    print -- " |\n"
-  elif [[ "$code" != *(\s) ]] ; then
-    print -n -- "\t" ; print -r -- "$code"
+    code="${code#*([[:blank:]])"typedef"+([[:blank:]])}"
+    code="${code%";"*([[:blank:]])}"
+    echo -n -e "\n| Type definition |\n| - |\n| "
+    echo -n -E "$code"
+    echo -e " |\n"
+  elif [[ "$code" != *([[:blank:]]) ]] ; then
+    echo -n -e "\t" ; echo -E "$code"
   elif ! (( comment )) ; then
-    print
+    echo
   fi
   code=""
 done

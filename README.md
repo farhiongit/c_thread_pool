@@ -4,23 +4,13 @@
 
 ![Image of the Giola Lagoon in Thassos](ocean-pool-Giola-Lagoon.jpg "A beautiful, fully featured sea pool")
 
-## Usage
-
-The thread pool pattern allows to run parallel tasks easily without the burden of thread management.
-
-The user:
-
-1. declares a thread pool and chooses the maximum number of parallel workers in charge of the execution of tasks (`threadpool_create_and_start ()`) ;
-2. submits tasks to the thread pool (`threadpool_add_task ()`) that will be passed to one of available workers and will be executed asynchronously ;
-3. waits for all the tasks to be completed (`threadpool_wait_and_destroy ()`).
-
-### Files
+## Files
 
 | Interface | Implementation |
 |- | - |
 | `wqm.h` | `wqm.c` |
 
-### Libraries
+## Libraries
 
 Create a static and dynamic library using :
 
@@ -55,21 +45,61 @@ cc -shared -o libwqm.so wqm.o
 |- | - |
 | `libwqm.a` | `libwqm.so` |
 
-### Interface
+## Application programming Interface
 
-#### Basic functionalities
+### Usage
+
+The thread pool pattern allows to run parallel tasks easily without the burden of thread management.
+
+The user:
+
+1. declares a thread pool and chooses the maximum number of parallel workers in charge of the execution of tasks (`threadpool_create_and_start ()`) ;
+2. submits tasks to the thread pool (`threadpool_add_task ()`) that will be passed to one of available workers and will be executed asynchronously ;
+3. waits for all the tasks to be completed (`threadpool_wait_and_destroy ()`).
+
+### Unique features
+
+This C standard implementation of a thread pool brings unique features, not found anywhere else at the time of writing.
+
+1. **Standard C:** It uses the standard (minimalist) C11 thread library <threads.h> (§7.28 of ISO/IEC C programming language), rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
+1. **Data management:** The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user-defined function `job_delete ()`), allowing collecting data at task termination.
+1. **Global data management:** Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
+1. **Worker data management:** Local data can be defined  (via `threadpool_set_worker_local_data_manager ()`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. **Resource management:** Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager ()`) and accessed (via `threadpool_global_resource ()`) for the thread pool.
+1. **Worker life-time management:** Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
+1. **Monitoring facility:** The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
+1. **Task cancellation:** Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
+1. **Virtual tasks:** The thread pool can wait for asynchronous calls without blocking workers (via `threadpool_task_continuation ()` and `threadpool_task_continue ()`).
+
+Those features are detailed below.
+
+#### Extra tools
+
+- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface (see [README](README_map.md)).
+- `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
+- `trace.h` permits to globally trace calls to a function without changing the code (see [README](README_trace.md)).
+- `h2md` is a script that converts header files with comments ([map.h](map.h) and [trace.h](trace.h)) into markdown files ([README_map.md](README_map.md) and [README_trace.md](README_trace.md)).
+
+### Basic functionalities
 
 | Function | Description |
 | - | - |
 | `threadpool_create_and_start` | Creates and starts a new pool of workers |
 | `threadpool_add_task` | Adds a task to the pool of workers |
 | `threadpool_wait_and_destroy` | Waits for all the tasks to be done and destroy the pool of workers |
+
+Those features are detailed below.
+
+### Advanced functionalities
+
+| Function | Description |
+| - | - |
 | `threadpool_cancel_task` | Cancels all pending tasks, the last or next submitted task, or a specific task |
 | `threadpool_set_monitor` | Sets a user-defined function to retrieve and display monitoring information |
 
 Those features are detailed below.
 
-#### Data management
+### Data management
 
 | Function | Description |
 | - | - |
@@ -82,7 +112,7 @@ Those features are detailed below.
 
 Those features are detailed below.
 
-#### Virtual tasks
+### Virtual tasks management
 
 | Function | Description |
 | - | - |
@@ -90,29 +120,6 @@ Those features are detailed below.
 | `threadpool_task_continue` | Callback function to be called by the callback function of an asynchronous call to proceed a virtual task |
 
 Those features are detailed below.
-
-## Unique features
-
-This implementation of a thread pool brings unique features, not found anywhere else at the time of writing.
-
-1. **Standard C:** It uses the standard (minimalist) C11 thread library <threads.h>, rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
-1. **Data management:** The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user-defined function `job_delete ()`), allowing collecting data at task termination.
-1. **Global data management:** Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
-1. **Worker data management:** Local data can be defined  (via `threadpool_set_worker_local_data_manager ()`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
-1. **Resource management:** Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager ()`) and accessed (via `threadpool_global_resource ()`) for the thread pool.
-1. **Worker life-time management:** Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
-1. **Monitoring facility:** The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
-1. **Task cancellation:** Pending tasks can be canceled after submission (via `threadpool_cancel_task ()`).
-1. **Virtual tasks:** The thread pool can wait for asynchronous calls without blocking workers (via `threadpool_task_continuation ()` and `threadpool_task_continue ()`).
-
-Those features are detailed below.
-
-### Extra tools
-
-- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface (see [README](README_map.md)).
-- `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
-- `trace.h` permits to globally trace calls to a function without changing the code (see [README](README_trace.md)).
-- `h2md.ksh` converts header files with comments ([map.h](map.h) and [trace.h](trace.h)) into markdown files ([README_map.md](README_map.md) and [README_trace.md](README_trace.md)).
 
 ## Detailed API
 
