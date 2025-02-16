@@ -73,7 +73,7 @@ examples/timers/timers: LDFLAGS+=-L.
 examples/timers/timers: LDLIBS=-lwqm -ltimer -lmap -lm -lrt
 examples/timers/timers: examples/timers/timers.c
 
-#### Libraries
+#### Tools
 .PHONY: callgraph
 callgraph:
 	@cflow -fposix -n --main threadpool_create_and_start --main threadpool_add_task --main threadpool_cancel_task --main threadpool_wait_and_destroy --main threadpool_task_continuation --main threadpool_task_continue wqm.c | grep -v '<>'
@@ -82,6 +82,7 @@ callgraph:
 cloc: map.h map.c timer.h timer.c wqm.h wqm.c
 	cloc --quiet --hide-rate --by-file $^
 
+#### Libraries
 .PHONY: libs
 libs: libmap.a libmap.so libtimer.a libtimer.so libwqm.a libwqm.so
 
@@ -121,12 +122,12 @@ po/libwqm.pot: wqm.c
 #### Documentation
 .PHONY: doc
 
-doc: README.html README_map.html README_trace.html
+doc: README.html README_map.html README_trace.html README_timer.html
 
-.SECONDARY: README_map.md README_trace.md
+.SECONDARY: README_map.md README_trace.md README_timer.md
 README_%.md: %.h
 	chmod +x ./h2md
-	./h2md < "$^" >| "$@"
+	./h2md "$^" >| "$@"
 
 %.html: %.md
 	pandoc -f markdown -- "$^" > "$@" || :

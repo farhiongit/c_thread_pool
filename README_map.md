@@ -15,12 +15,36 @@ Language: C (C11 or higher)
 
 
 
+
+The interface has only 7 functions to do everything:
+
+- `map_create`
+- `map_destroy`
+- `map_size`
+- `map_insert_data`
+- `map_find_key`
+- `map_traverse`
+- `map_traverse_backward`
+
+
+
+
+
+## Type definitions
+
+
+
 | Define | Value |
 | - | - |
 | \_\_MAP\_H\_\_ |
 
 
-A map (internally modeled as a sorted binary tree).
+
+### Map
+
+
+
+A map as an opaque Abstract Data Type (internally modelled as a sorted binary tree):
 
 
 
@@ -29,9 +53,14 @@ A map (internally modeled as a sorted binary tree).
 | struct map map |
 
 
+The map stores pointers to allocated data:
 
-## Creates a new map.
+	  void *data;
+	
 
+
+
+### Key
 
 
 
@@ -45,17 +74,34 @@ The type of the user-defined function that should return a pointer to the the pa
 | const void \*(\*map\_key\_extractor) (void \*data) |
 
 
-
-The type of the user-defined function that compares two keys of elements of a map.
-
+Functions of type `map_key_extractor` should not allocate memory dynamically though.
 
 
 
-A comparison function must return an integer less than, equal to, or greater than zero
+
+Example:
+
+	  struct entry
+	  {
+	    char* word;
+	    char* definition;
+	  }
+
+	  const void* get_word (void* data)
+	  {
+	    return ((struct entry *)data)->word;
+	  }
 
 
 
-if the first argument is considered to be respectively less than, equal to, or greater than the second.
+
+
+
+### Key comparator
+
+
+
+The type of a user-defined function that compares two keys of elements of a map.
 
 
 
@@ -63,6 +109,157 @@ if the first argument is considered to be respectively less than, equal to, or g
 | Type definition |
 | - |
 | int (\*map\_key\_comparator) (const void \*key\_a, const void \*key\_b, void \*arg) |
+
+
+`key_a` and `key_b` are pointers to keys, as they would be returned by a function of type `map_key_extractor`.
+
+
+
+
+A comparison function must return an integer less than, equal to, or greater than zero if the first argument is considered to be respectively less than, equal to, or greater than the second.
+
+
+
+
+The third argument `arg` receives the pointer that was passed to `map_create`.
+
+
+
+
+
+### Selector on elements of the map
+
+
+
+The type of a user-defined function that selects elements while traversing a map with `map_traverse` or `map_traverse_backward`.
+
+
+
+
+| Type definition |
+| - |
+| int (\*map\_selector) (void \*data, void \*context) |
+
+
+The data of the element of the map is passed as the first argument of the map_selector.
+
+
+
+
+The second argument `context` receives the pointer passed to `map_traverse` and `map_traverse_backward` (as last argument).
+
+
+
+
+Should return `1` if the `data` conforms to the user-defined conditions (and should be selected by `map_traverse` or `map_traverse_backward`), `0` otherwise.
+
+
+
+
+
+### Operator on elements of the map
+
+
+
+The type of a user-defined function that operates on (and optionally removes) an element of a map picked by `map_traverse`, `map_traverse_backward` or `map_find_key`.
+
+
+
+
+| Type definition |
+| - |
+| int (\*map\_operator) (void \*data, void \*context, int \*remove) |
+
+
+The data of the element of the map is passed as the first argument of the `map_operator`.
+
+
+
+
+The second argument `context` receives the pointer passed to `map_traverse`, `map_traverse_backward` and `map_find_key` (as last argument).
+
+
+
+
+The third argument `remove` receives a non-null pointer. If (and only if) the operator sets `*remove` to a non-zero value,
+
+
+
+  - the element will be removed from the map thread-safely ;
+
+
+
+  - the operator **should** free the data passed to it if it was allocated dynamically (otherwise it would be lost).
+
+
+
+
+Should return `1` if the operator should be applied on further elements of the map, `0` otherwise.
+
+
+
+
+In other words, as soon as the operator returns `0`, it stops `map_traverse`, `map_traverse_backward` or `map_find_key`.
+
+
+
+
+
+#### Helper map operator to retrieve an element
+
+
+
+This map operator simply retrieves and removes an element of the map.
+
+
+
+	extern map_operator MAP_REMOVE;
+
+> Its use is **not recommended** though. Actions on an element should better be directly integrated in the `map_operator` function.
+
+
+
+
+If the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
+
+
+
+the helper operator `MAP_REMOVE` removes and retrieves the first element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
+
+
+
+and sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
+
+
+
+
+`context` **should be** the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
+
+
+
+
+Example
+
+If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
+
+	  T *data = 0;  // `data` is a *pointer* to the type stored in the map.
+	  if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
+	  {
+	    // `data` can thread-safely be used to work with.
+	    ...
+	    // If needed, it can be reinserted in the map after use.
+	    map_insert_data (m, data);
+	  }
+	
+
+
+
+## Interface
+
+
+
+
+### Create a map
 
 
 	map *map_create (map_key_extractor get_key, map_key_comparator cmp_key, void *arg, int property);
@@ -96,7 +293,7 @@ if the first argument is considered to be respectively less than, equal to, or g
 
 
 
-A pointer is passed to the comparison function `cmp_key` (as third argument) via `arg` (`arg` can be `0`).
+The pointer `arg` (which can be `0`) is passed to the comparison function `cmp_key` (as third argument).
 
 
 
@@ -127,7 +324,7 @@ The second data is not inserted.
 
 	extern int MAP_UNIQUENESS;      
 
-The second data is inserted AFTER the first data with the identical key.
+The second data is inserted **after** the first data with the identical key.
 
 
 	extern int MAP_STABLE;          
@@ -144,40 +341,48 @@ Helper function to be used as a key extractor for sets and ordered lists (see be
 	extern map_key_extractor MAP_KEY_IS_DATA;       
 
 
-7 possible uses:
+7 possible uses, depending on `property` and `get_key`:
 
-| Use            | Property             | `get_key`         | Comment                                                                                                                    |
+| Use            | `property`           | `get_key`         | Comment                                                                                                                    |
 | -              | -                    | -                 | -                                                                                                                          |
 | Ordered map    | `MAP_UNIQUENESS`     | Non-zero          | Each key is unique in the map. `get_key` and `cmp_key` must be set.                                                        |
 | Dictionary     | not `MAP_UNIQUENESS` | Non-zero          | Keys can have multiple entries in the map. `get_key` and `cmp_key` must be set.                                            |
 | Set            | `MAP_UNIQUENESS`     | `MAP_KEY_IS_DATA` | Elements are unique. `cmp_key` must be set.                                                                                |
 | Ordered list   | `MAP_STABLE`         | `MAP_KEY_IS_DATA` | Equal elements are ordered in the order they were inserted. `cmp_key` must be set.                                         |
-| Unordered list | `MAP_NONE`           | `0`               | `cmp_key` must be 0 as well.                                                                                               |
-| FIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse (m, MAP_REMOVE, sel, &data)` to remove an element.         |
-| LIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse_backward (m, MAP_REMOVE, sel, &data)` to remove an element.|
+| Unordered list | `MAP_NONE`           | `0`               | `cmp_key` must be `0` as well.                                                                                             |
+| FIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse (m, MAP_REMOVE, 0, &data)` to remove an element.           |
+| LIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse_backward (m, MAP_REMOVE, 0, &data)` to remove an element.  |
 
-(*) If `cmp_key` or `get_key` is `0` and property is `MAP_STABLE`, complexity is reduced by a factor log n.
-
-
+> (*) If `cmp_key` or `get_key` is `0` and property is `MAP_STABLE`, complexity is reduced by a factor log n.
 
 
 
 
 
-## Destroy a map.
 
+
+### Destroy a map
 
 
 	int map_destroy (map *);
 
-Destroys an EMPTY and previously created map. Returns `EXIT_FAILURE` (and `errno` set to `EPERM`) if the map is not empty (and the map is NOT destroyed), `EXIT_SUCCESS` otherwise.
+Destroys an **empty** and previously created map.
+
+
+
+
+If the map is not empty, the map is not destroyed.
+
+
+
+
+Returns `EXIT_FAILURE` (and `errno` set to `EPERM`) if the map is not empty (and the map is NOT destroyed), `EXIT_SUCCESS` otherwise.
 
 
 
 
 
-## Retrieve the number of elements in a map.
-
+### Retrieve the number of elements in a map
 
 
 	size_t map_size (map *);
@@ -187,7 +392,7 @@ Returns the number of elements in a map.
 
 
 
-Note: if the map is used by several threads, `map_size` should better not be used since the size of the map can be modified any time.
+Note: if the map is used by several threads, `map_size` should better not be used since the size of the map can be modified any time by other threads.
 
 
 
@@ -198,8 +403,7 @@ Complexity : 1. MT-safe.
 
 
 
-## Add an element into a map.
-
+### Add an element into a map
 
 
 	int map_insert_data (map *, void *data);
@@ -215,85 +419,18 @@ Complexity : log n (see (*) above). MT-safe. Non-recursive.
 
 
 
-## Retrieve and remove elements from the map.
+### Retrieve and remove elements from a map
+
+
+
+
+> `map_find_key`, `map_traverse`, `map_traverse_backward` and `map_insert_data` can call each other (the map should be passed in the `context` argument though).
 
 
 
 
 
-Note: `map_find_key`, `map_traverse`, `map_traverse_backward` and `map_insert_data` can call each other (the map should be passed in the `context` argument though).
-
-
-
-
-
-### Signature of a user-defined selector on elements of the map.
-
-
-
-
-| Type definition |
-| - |
-| int (\*map\_selector) (void \*data, void \*context) |
-
-
-The data of the element of the map is passed as the first argument of the map_selector.
-
-
-
-
-The second argument `context` is the pointer passed to `map_traverse` and `map_traverse_backward` (as last argument).
-
-
-
-
-Should return `1` if the `data` conforms to the user-defined conditions, `0` otherwise.
-
-
-
-
-
-### Signature of a user-defined operator on elements of the map.
-
-
-
-
-| Type definition |
-| - |
-| int (\*map\_operator) (void \*data, void \*context, int \*remove) |
-
-
-The data of the element of the map is passed as the first argument of the `map_operator`.
-
-
-
-
-The second argument `context` is the pointer passed to `map_traverse`, `map_traverse_backward` and `map_find_key` (as last argument).
-
-
-
-
-The third argument `remove` is a non-null pointer. If (and only if) the operator sets `*remove` to a non-zero value,
-
-
-
-  - the element will be removed from the map thread-safely ;
-
-
-
-  - the operator SHOULD free the data passed to it if it was allocated dynamically (otherwise it would be lost).
-
-
-
-
-Should return `1` if the operator should be applied on other elements of the map, `0` otherwise.
-
-
-
-
-
-### Find an element from its key.
-
+#### Find an element from its key
 
 
 	size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
@@ -319,8 +456,7 @@ Complexity : log n (see (*)). MT-safe. Non-recursive.
 
 
 
-### Traverse a map.
-
+#### Traverse a map
 
 
 	size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
@@ -351,42 +487,5 @@ Complexity : n * log n (see (*)). MT-safe. Non-recursive.
 
 
 
-
-### Helper map operator to retrieve an element.
-
-
-
-	extern map_operator MAP_REMOVE;
-
-If the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
-
-
-
-the helper operator `MAP_REMOVE` removes and retrieves the first element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
-
-
-
-and sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
-
-
-
-
-`context` SHOULD BE the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
-
-
-
-
-#### Example
-
-If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
-
-	  T *data = 0;  // `data` is a *pointer* to the type stored in the map.
-	  if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
-	  {
-	    // `data` can thread-safely be used to work with.
-	    ...
-	    // If needed, it can be reinserted in the map after use.
-	    map_insert_data (m, data);
-	  }
-	
-
+-----
+*This page was generated automatically from `map.h` by `h2md`.*

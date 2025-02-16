@@ -1,18 +1,25 @@
-// # DEFINITION
+// # `trace.h` permits to instrument the code (without changing it) to trace all calls to a function.
 #ifndef __TRACE__
-#  define __TRACE__
 #  include <stdio.h>
 #  include <threads.h>
-#  define TRACE(text)               fprintf (stderr, "[%lX:%s] %s <%s:%d>\n", thrd_current(), __func__, (text), __FILE__, __LINE__)
-#  define TRACE_EXPRESSION(expr)    (TRACE(#expr), (expr))
+#  define __TRACE__(text)               fprintf (stderr, "[%lX:%s] %s <%s:%d>\n", thrd_current(), __func__, (text), __FILE__, __LINE__)
+// ## DEFINITIONS
+// Use `#define function(...) TRACE_EXPRESSION(function (__VA_ARGS__))` to trace all calls to `function` to the standard error stream.
+#  define TRACE_EXPRESSION(expr)    (__TRACE__(#expr), (expr))
+// Use `TRACE_FORMAT (fmt, args);` to log a message to the standard error stream.
 #  define TRACE_FORMAT(...)         do { fprintf (stderr, "[%lX:%s] ", thrd_current(), __func__) ; fprintf (stderr, __VA_ARGS__) ; fprintf (stderr, " <%s:%d>\n", __FILE__, __LINE__); } while (0)
 
-/* # USAGE
- If my_function is a function, write:
- #define my_function(...) TRACE_EXPRESSION(my_function (__VA_ARGS__))
- to trace all calls to my_function.
- If my_function is a user-defined function, this should be written just after the definition of the function.
- For instance, the following program:
+/*
+## USAGE
+If `function` is a function (user-defined or external), write:
+
+   #define function(...) TRACE_EXPRESSION(function (__VA_ARGS__))
+
+to trace all calls to `function` to the standard error stream.
+> If `function` is a user-defined function, this should be written **just after** its definition.
+
+## EXAMPLE
+For instance, the following program:
 
     #include <unistd.h>
     #include "trace.h"

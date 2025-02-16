@@ -1,11 +1,7 @@
 
-# DEFINITION
+# `trace.h` permits to instrument the code (without changing it) to trace all calls to a function.
 
 
-
-| Define | Value |
-| - | - |
-| \_\_TRACE\_\_ |
 
 
 | Include |
@@ -20,12 +16,26 @@
 
 | Define | Value |
 | - | - |
-| TRACE(text) | fprintf (stderr, "[%lX:%s] %s <%s:%d>\\n", thrd\_current(), \_\_func\_\_, (text), \_\_FILE\_\_, \_\_LINE\_\_) |
+| \_\_TRACE\_\_(text) | fprintf (stderr, "[%lX:%s] %s <%s:%d>\\n", thrd\_current(), \_\_func\_\_, (text), \_\_FILE\_\_, \_\_LINE\_\_) |
+
+
+## DEFINITIONS
+
+
+
+Use `#define function(...) TRACE_EXPRESSION(function (__VA_ARGS__))` to trace all calls to `function` to the standard error stream.
+
+
 
 
 | Define | Value |
 | - | - |
-| TRACE\_EXPRESSION(expr) | (TRACE(#expr), (expr)) |
+| TRACE\_EXPRESSION(expr) | (\_\_TRACE\_\_(#expr), (expr)) |
+
+
+Use `TRACE_FORMAT (fmt, args);` to log a message to the standard error stream.
+
+
 
 
 | Define | Value |
@@ -34,13 +44,18 @@
 
 
 
-# USAGE
-If my_function is a function, write:
-#define my_function(...) TRACE_EXPRESSION(my_function (__VA_ARGS__))
-to trace all calls to my_function.
 
-If my_function is a user-defined function, this should be written just after the definition of the function.
+## USAGE
+If `function` is a function (user-defined or external), write:
 
+	   #define function(...) TRACE_EXPRESSION(function (__VA_ARGS__))
+
+to trace all calls to `function` to the standard error stream.
+
+> If `function` is a user-defined function, this should be written **just after** its definition.
+
+
+## EXAMPLE
 For instance, the following program:
 
 	    #include <unistd.h>
@@ -96,3 +111,5 @@ will yield:
 
 	
 
+-----
+*This page was generated automatically from `trace.h` by `h2md`.*

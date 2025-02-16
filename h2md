@@ -1,98 +1,75 @@
 #!/bin/bash
 shopt -s extglob
 # Convert a header file into a markdown file.
-# Lines ending with '\' are aggregated before parsing.
-# A comment starting on the same line as a piece of code is related to this code and should be printed out BEFORE that code and followed by ':'.
-# Code and comments are trimmed of leading and trailing spaces.
-# A comment ending with '.' is printed out followed by an empty line (md feature).
-# Pieces of code are aggregated into code statements.
-# A code statement is printed out preceded by '> ' (md feature).
-
-# Text: concatenate a line ending with '\' with the next line.
-
-# Pre-processor: lines starting with '#'.
-# Pre-processor: "^#*([[:blank:]])define*\n".
-# Pre-processor: "^#*([[:blank:]])include*\n".
-# Pre-processor: ignore "^#*([[:blank:]])\n".
-# Pre-processor: a comment is replaced by ' '.
-# Pre-processor: trim leading and trailing spaces.
-
-# Code: lines not starting with '#'.
-# Code: a comment is replaced by ' '.
-# Code: trim trailing spaces.
-# Code: ignore empty lines.
-# Code: prepend with '    '.
-
-# Comment: "/* ... */".
-# Comment: "// ...\n".
-# Comment: trim leading and trailing spaces.
-# Comment: replace trailing '.' by '.\n'.
-
+# Pass the header file to convert as first argument.
+# Markdown text sent to standard output.
 typeset -i comment=0
 typeset -i endcomment=0
 typeset -i newpar=0
 typeset -i verbatim=0
 preline=
-while IFS= read -r newline ; do
-  preline="$preline${newline%"\\"}"
+while IFS= read -r newline ; do  # Read standard input stream
+  preline="$preline${newline%"\\"}"  # Aggregate lines ending with \
   if [[ "$newline" == *"\\" ]] ; then
     continue
   else
     line="$preline"
     preline=
   fi
-  if (( comment )) && [[ "$line" == *([[:blank:]]) ]] ; then
+  if (( comment )) && [[ "$line" == *([[:blank:]]) ]] ; then   # An empty line starts a new paragraph.
     echo
     newpar=1
     verbatim=0
   fi
-  if (( comment )) && (( newpar )) && [[ "$line" == +([[:blank:]])!([[:blank:]])* ]] ; then
+  if (( comment )) && (( newpar )) && [[ "$line" == +([[:blank:]])!([[:blank:]])* ]] ; then  # A new paragraph starting with spaces is treated as verbatim (snippets of code inside comments).
     newpar=0
     verbatim=1
   fi
-  while ! [[ "$line" == *([[:blank:]]) ]] ; do
+  while ! [[ "$line" == *([[:blank:]]) ]] ; do  # Not a blank line
           if ! (( comment )) && [[ "$line" == *"/*"*"*/"* ]] ; then
-            a="${line#*"/*"}"
-            a="${a%%"*/"*}"
-            #a="${a//"."+([[:blank:]])/".\n\n"}"
-            a="${a/%"."*([[:blank:]])/".\n"}"
+            a="${line#*"/*"}"                              # what is after /*
+            a="${a%%"*/"*}"                                # what if before */
+            a="${a##+("*")*([[:blank:]])}"                               # what if after ****
+            a="${a%%*([[:blank:]])+("*")}"                               # what if before ****
+            a="${a/%"."*([[:blank:]])/".\n"}"              # add a \n after . followed by spaces
             echo -e "\n${a#+([[:blank:]])}\n"
-            code="$code ${line%%"/*"*}"
-            line="${line#*"*/"}"
+            code="$code ${line%%"/*"*}"                    # what is before /* is code, a space replaces the comment in the code
+            line="${line#*"*/"}"                           # what is after */ is code or comments
           elif ! (( comment )) && [[ "$line" == *"/*"* ]] ; then
             comment=1
-            a="${line#*"/*"}"
-            #a="${a//"."+([[:blank:]])/".\n\n"}"
-            a="${a/%"."*([[:blank:]])/".\n"}"
+            a="${line#*"/*"}"                              # what is after /*
+            a="${a##+("*")*([[:blank:]])}"                 # what if after ****
+            a="${a%%*([[:blank:]])+("*")}"                 # what if before ****
+            a="${a/%"."*([[:blank:]])/".\n"}"              # add a \n after . followed by spaces
             echo -e "\n${a#+([[:blank:]])}"
-            code="$code${line%%"/*"*}"
+            code="$code${line%%"/*"*}"                     # what is before /* is code
             line=""
           elif (( comment )) && [[ "$line" == *"*/"* ]] ; then
             comment=0
-            a="${line%%"*/"*}"
-            #a="${a//"."+([[:blank:]])/".\n\n"}"
+            a="${line%%"*/"*}"                             # what if before */
+            a="${a%%*([[:blank:]])+("*")}"                 # what if before ****
             if ! (( verbatim )) ; then
-                    a="${a/%"."*([[:blank:]])/".\n"}"
+                    a="${a/%"."*([[:blank:]])/".\n"}"      # add a \n after . followed by spaces
                     echo -e "${a#+([[:blank:]])}\n"
-            else
+            else                                           # verbatim
                     echo -n -e "\t" ; echo -E "${a%%+([[:blank:]])}"
             fi
-            line="${line#*"*/"}"
-            code="$code "
+            line="${line#*"*/"}"                           # what is after */ is code or comments
+            code="$code "                                  # a space replaces the comment in the code
           elif (( comment )) ; then
             a="$line"
-            #a="${a//"."+([[:blank:]])/".\n\n"}"
             if ! (( verbatim )) ; then
-                    a="${a/%"."*([[:blank:]])/".\n"}"
+                    a="${a##*([[:blank:]])+("*")*([[:blank:]])}"         # what if after ****
+                    a="${a%%*([[:blank:]])+("*")}"         # what if before ****
+                    a="${a/%"."*([[:blank:]])/".\n"}"      # add a \n after . followed by spaces
                     echo -e "${a#+([[:blank:]])}"
-            else
+            else                                           # verbatim
                     echo -n -e "\t" ; echo -E "${a%%+([[:blank:]])}"
             fi
             line=""
           elif ! (( comment )) && [[ "$line" == *"//"* ]] ; then
-            a="${line#*"//"}"
-            #a="${a//"."+([[:blank:]])/".\n\n"}"
-            a="${a/%"."*([[:blank:]])/".\n"}"
+            a="${line#*"//"}"                              # what is after //
+            a="${a/%"."*([[:blank:]])/".\n"}"              # add a \n after . followed by spaces
             echo -e "\n${a#+([[:blank:]])}\n"
             code="$code${line%%"//"*}"
             line=""
@@ -101,14 +78,15 @@ while IFS= read -r newline ; do
             line=""
           fi
   done
-  if [[ "$code" == "#"*([[:blank:]])"include"+([[:blank:]])* ]] ; then
+  ## Code between comments
+  if [[ "$code" == "#"*([[:blank:]])"include"+([[:blank:]])* ]] ; then  # '#include'
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
     echo -n -e "\n| Include |\n| - |\n| "
     echo -n -E "${code#"#"*([[:blank:]])"include"+([[:blank:]])}"
     echo -e " |\n"
-  elif [[ "$code" == "#"*([[:blank:]])"define"+([[:blank:]])* ]] ; then
+  elif [[ "$code" == "#"*([[:blank:]])"define"+([[:blank:]])* ]] ; then  # '#define'
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
@@ -118,7 +96,7 @@ while IFS= read -r newline ; do
     echo -e " |\n"
   elif [[ "$code" == "#"* ]] ; then
     :
-  elif [[ "$code" == *([[:blank:]])"typedef"+([[:blank:]])* ]] ; then
+  elif [[ "$code" == *([[:blank:]])"typedef"+([[:blank:]])* ]] ; then  # 'typedef'
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
     code="${code//"_"/"\\_"}"
@@ -127,10 +105,12 @@ while IFS= read -r newline ; do
     echo -n -e "\n| Type definition |\n| - |\n| "
     echo -n -E "$code"
     echo -e " |\n"
-  elif [[ "$code" != *([[:blank:]]) ]] ; then
+  elif [[ "$code" != *([[:blank:]]) ]] ; then                          # code
     echo -n -e "\t" ; echo -E "$code"
   elif ! (( comment )) ; then
     echo
   fi
   code=""
-done
+done < "$1"
+echo -----
+echo -e "*This page was generated automatically from \`${1##*/}\` by \`${0##*/}\`.*"
