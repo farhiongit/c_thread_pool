@@ -29,10 +29,10 @@ while IFS= read -r newline ; do  # Read standard input stream
           if ! (( comment )) && [[ "$line" == *"/*"*"*/"* ]] ; then
             a="${line#*"/*"}"                              # what is after /*
             a="${a%%"*/"*}"                                # what if before */
-            a="${a##+("*")*([[:blank:]])}"                               # what if after ****
-            a="${a%%*([[:blank:]])+("*")}"                               # what if before ****
-            a="${a/%"."*([[:blank:]])/".\n"}"              # add a \n after . followed by spaces
-            echo -e "\n${a#+([[:blank:]])}\n"
+            a="${a##+("*")*([[:blank:]])}"                 # what if after ****
+            a="${a%%*([[:blank:]])+("*")}"                 # what if before ****
+            a="${a/%"."*([[:blank:]])/".\n\n"}"            # add a \n after . followed by spaces
+            echo -e "${a#+([[:blank:]])}"
             code="$code ${line%%"/*"*}"                    # what is before /* is code, a space replaces the comment in the code
             line="${line#*"*/"}"                           # what is after */ is code or comments
           elif ! (( comment )) && [[ "$line" == *"/*"* ]] ; then
@@ -40,8 +40,8 @@ while IFS= read -r newline ; do  # Read standard input stream
             a="${line#*"/*"}"                              # what is after /*
             a="${a##+("*")*([[:blank:]])}"                 # what if after ****
             a="${a%%*([[:blank:]])+("*")}"                 # what if before ****
-            a="${a/%"."*([[:blank:]])/".\n"}"              # add a \n after . followed by spaces
-            echo -e "\n${a#+([[:blank:]])}"
+            a="${a/%"."*([[:blank:]])/".\n\n"}"            # add a \n after . followed by spaces
+            echo -e "${a#+([[:blank:]])}"
             code="$code${line%%"/*"*}"                     # what is before /* is code
             line=""
           elif (( comment )) && [[ "$line" == *"*/"* ]] ; then
@@ -49,8 +49,8 @@ while IFS= read -r newline ; do  # Read standard input stream
             a="${line%%"*/"*}"                             # what if before */
             a="${a%%*([[:blank:]])+("*")}"                 # what if before ****
             if ! (( verbatim )) ; then
-                    a="${a/%"."*([[:blank:]])/".\n"}"      # add a \n after . followed by spaces
-                    echo -e "${a#+([[:blank:]])}\n"
+                    a="${a/%"."*([[:blank:]])/".\n\n"}"    # add a \n after . followed by spaces
+                    echo -e "${a#+([[:blank:]])}"
             else                                           # verbatim
                     echo -n -e "\t" ; echo -E "${a%%+([[:blank:]])}"
             fi
@@ -61,7 +61,7 @@ while IFS= read -r newline ; do  # Read standard input stream
             if ! (( verbatim )) ; then
                     a="${a##*([[:blank:]])+("*")*([[:blank:]])}"         # what if after ****
                     a="${a%%*([[:blank:]])+("*")}"         # what if before ****
-                    a="${a/%"."*([[:blank:]])/".\n"}"      # add a \n after . followed by spaces
+                    a="${a/%"."*([[:blank:]])/".\n\n"}"    # add a \n after . followed by spaces
                     echo -e "${a#+([[:blank:]])}"
             else                                           # verbatim
                     echo -n -e "\t" ; echo -E "${a%%+([[:blank:]])}"
@@ -69,8 +69,8 @@ while IFS= read -r newline ; do  # Read standard input stream
             line=""
           elif ! (( comment )) && [[ "$line" == *"//"* ]] ; then
             a="${line#*"//"}"                              # what is after //
-            a="${a/%"."*([[:blank:]])/".\n"}"              # add a \n after . followed by spaces
-            echo -e "\n${a#+([[:blank:]])}\n"
+            a="${a/%"."*([[:blank:]])/".\n\n"}"            # add a \n after . followed by spaces
+            echo -e "${a#+([[:blank:]])}"
             code="$code${line%%"//"*}"
             line=""
           else
@@ -79,6 +79,7 @@ while IFS= read -r newline ; do  # Read standard input stream
           fi
   done
   ## Code between comments
+  if (( comment )) ; then continue ; fi
   if [[ "$code" == "#"*([[:blank:]])"include"+([[:blank:]])* ]] ; then  # '#include'
     code="${code//"\\"/"\\\\"}"
     code="${code//"*"/"\\*"}"
@@ -105,12 +106,13 @@ while IFS= read -r newline ; do  # Read standard input stream
     echo -n -e "\n| Type definition |\n| - |\n| "
     echo -n -E "$code"
     echo -e " |\n"
-  elif [[ "$code" != *([[:blank:]]) ]] ; then                          # code
-    echo -n -e "\t" ; echo -E "$code"
-  elif ! (( comment )) ; then
-    echo
+  elif [[ "$code" != *([[:blank:]]) ]] ; then              # code
+    echo -e '```c'
+    echo -E "$code"
+    echo -e '```'
   fi
   code=""
 done < "$1"
+echo
 echo -----
 echo -e "*This page was generated automatically from \`${1##*/}\` by \`${0##*/}\`.*"

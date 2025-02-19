@@ -125,9 +125,9 @@ po/libwqm.pot: wqm.c
 doc: README.html README_map.html README_trace.html README_timer.html
 
 .SECONDARY: README_map.md README_trace.md README_timer.md
-README_%.md: %.h
+README_%.md: %.h ./h2md
 	chmod +x ./h2md
-	./h2md "$^" >| "$@"
+	./h2md "$<" >| "$@"
 
 %.html: %.md
 	pandoc -f markdown -- "$^" > "$@" || :

@@ -1,5 +1,6 @@
-// (c) L. Farhi, 2024
-// Language: C (C11 or higher)
+// # A simple user-interface to define timers within a single process (but possibly several threads)
+// (c) L. Farhi, 2024.
+// Language: C (C11 or higher).
 #ifndef __TIMERS_H__
 #  define __TIMERS_H__
 #  include <time.h>

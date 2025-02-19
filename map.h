@@ -1,7 +1,8 @@
 /********************** # Map me ! *********************/
 // **A unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface.**
-// (c) L. Farhi, 2024
-// Language: C (C11 or higher)
+//
+// (c) L. Farhi, 2024.
+// Language: C (C11 or higher).
 
 /* The interface has only 7 functions to do everything:
 
@@ -65,6 +66,7 @@ typedef int (*map_operator) (void *data, void *context, int *remove);
 // The data of the element of the map is passed as the first argument of the `map_operator`.
 // The second argument `context` receives the pointer passed to `map_traverse`, `map_traverse_backward` and `map_find_key` (as last argument).
 // The third argument `remove` receives a non-null pointer. If (and only if) the operator sets `*remove` to a non-zero value,
+//
 //   - the element will be removed from the map thread-safely ;
 //   - the operator **should** free the data passed to it if it was allocated dynamically (otherwise it would be lost).
 // Should return `1` if the operator should be applied on further elements of the map, `0` otherwise.
