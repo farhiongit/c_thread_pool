@@ -17,7 +17,15 @@ struct threadpool;              // Abstract data type : opaque record of a threa
 extern const size_t NB_CPU;
 #  endif
 extern const size_t SEQUENTIAL;
-struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data);
+
+typedef enum
+{
+  ALL_TASKS,                    // Runs all submitted tasks.
+  ALL_SUCCESSFUL_TASKS,         // Runs pending tasks until one fails. Cancel others.
+  ONE_TASK,                     // Runs one pending task. Cancel others.
+  ONE_SUCCESSFUL_TASK,          // Runs pending tasks until one succeeds. Cancel others.
+} threadpool_property;
+struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, threadpool_property property);
 
 // Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);
@@ -40,11 +48,11 @@ size_t threadpool_add_task (struct threadpool *threadpool, int (*work) (struct t
 // 'job_delete' is passed, as argument, the 'job' added by 'threadpool_add_job'.
 // 'job_delete' is useful if the 'job' passed to 'threadpool_add_job' has been allocated dynamically and needs to be free'd after use.
 
-// Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_TASKS, or the next submitted task if task_id is equal to NEXT_TASK, or the last if equal to LAST_TASK.
-// Returns the number of canceled tasks.
-extern const size_t ALL_TASKS;
-extern const size_t NEXT_TASK;
-extern const size_t LAST_TASK;
+// Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_PENDING_TASKS, or the next submitted task if task_id is equal to NEXT_PENDING_TASK, or the last if equal to LAST_PENDING_TASK.
+// Returns the number of cancelled tasks.
+extern const size_t ALL_PENDING_TASKS;  // Cancels all pending tasks
+extern const size_t NEXT_PENDING_TASK;  // Cancels next pending task (in submission order)
+extern const size_t LAST_PENDING_TASK;  // Cancels last pending tasks (in submission order)
 size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id);
 
 // Once all tasks have been submitted to the threadpool, 'threadpool_wait_and_destroy' waits for all the tasks to be finished and thereafter destroys the threadpool.
@@ -53,7 +61,7 @@ void threadpool_wait_and_destroy (struct threadpool *threadpool);
 
 // Manage local data or workers.
 // make_local will be called when a worker is created and delete_local when it is terminated.
-// Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialization.
+// Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialisation.
 // Call to 'delete_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker termination.
 void threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data));
 

@@ -301,7 +301,7 @@ main (void)
 #define getrlimit(resource) do { struct rlimit resource; getrlimit (RLIMIT_##resource, &resource); fprintf (stdout, "getrlimit (" #resource ") = %'jd\n", (intmax_t) resource.rlim_cur); } while (0)
   getrlimit (SIGPENDING);       // the number of timers is limited by the RLIMIT_SIGPENDING
   fprintf (stdout, "Running %d virtual tasks (asynchronous timers of at most %g seconds) on a single worker (timeout %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, 1. * TIMEOUT);
-  struct threadpool *tp = threadpool_create_and_start (SEQUENTIAL, 0);
+  struct threadpool *tp = threadpool_create_and_start (SEQUENTIAL, 0, ALL_TASKS);
   threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
   for (size_t i = 0; i < NB_TIMERS; i++)
     threadpool_add_task (tp, wait, job_create (1. * MAXDELAY * rand () / RAND_MAX), job_delete);

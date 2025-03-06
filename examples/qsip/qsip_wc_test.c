@@ -130,7 +130,7 @@ main ()
   struct gd gd = { (size_t) SIZE, ELEM_SIZE (base), threads_tags };
   size_t nb_workers = strlen (threads_tags);
   fprintf (stdout, _("%zu workers requested and processing...\n"), nb_workers);
-  struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd);        // Start 7 workers
+  struct threadpool *tp = threadpool_create_and_start (nb_workers, &gd, ALL_TASKS);     // Start 7 workers
   threadpool_set_worker_local_data_manager (tp, tag, untag);
   threadpool_set_global_resource_manager (tp, res_alloc, res_dealloc);
   threadpool_set_idle_timeout (tp, 1);
@@ -155,15 +155,15 @@ main ()
   threadpool_add_task (tp, 0, malloc (1), free);
   sleep (1);
   fprintf (stdout, _("Canceling two tasks (last submitted and pending).\n"));
-  threadpool_cancel_task (tp, LAST_TASK);
-  threadpool_cancel_task (tp, LAST_TASK);
+  threadpool_cancel_task (tp, LAST_PENDING_TASK);
+  threadpool_cancel_task (tp, LAST_PENDING_TASK);
   sleep (1);
   fprintf (stdout, _("Canceling two tasks (first submitted and pending).\n"));
-  threadpool_cancel_task (tp, NEXT_TASK);
-  threadpool_cancel_task (tp, NEXT_TASK);
+  threadpool_cancel_task (tp, NEXT_PENDING_TASK);
+  threadpool_cancel_task (tp, NEXT_PENDING_TASK);
   sleep (1);
   fprintf (stdout, _("Canceling all pending tasks.\n"));
-  threadpool_cancel_task (tp, ALL_TASKS);
+  threadpool_cancel_task (tp, ALL_PENDING_TASKS);
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, _("Done.\n"));
   free (base);

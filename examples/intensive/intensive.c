@@ -41,7 +41,7 @@ main (void)
   size_t nb_requested_workers = MAX_NB_THREADS; // Only MAX_NB_THREADS will be allocated.
   size_t nb_tasks = 4 * nb_requested_workers;
 
-  struct threadpool *tp = threadpool_create_and_start (nb_requested_workers, 0);
+  struct threadpool *tp = threadpool_create_and_start (nb_requested_workers, 0, ALL_TASKS);
   (void) monitor_handler;
   (void) monitor_start_and_stop;
   threadpool_set_monitor (tp, monitor_handler, monitor_start_and_stop, 0);

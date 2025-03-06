@@ -239,7 +239,7 @@ qsip (void *base, size_t nmemb, size_t size, int (*lt) (const void *, const void
   GlobalData global_data = {.elem_size = size,.elem_lt = lt,.elem_lt_arg = 0 };
   atomic_init (&global_data.nb_swaps, 0);
   atomic_init (&global_data.nb_cmp, 0);
-  struct threadpool *ThreadPool = threadpool_create_and_start (NB_CPU, &global_data);
+  struct threadpool *ThreadPool = threadpool_create_and_start (NB_CPU, &global_data, ALL_TASKS);
   threadpool_set_worker_local_data_manager (ThreadPool, local_data_create, local_data_delete);
 
   // Feed thread workers.
