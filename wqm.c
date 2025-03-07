@@ -167,7 +167,7 @@ threadpool_task_continuator_continue_operator (void *data, void *res, int *remov
 {
   (void) res;
   struct continuator_data *continuator = data;
-  if (!threadpool_create_task (continuator->threadpool, continuator->work, continuator->job.data, continuator->job.data_delete, 1))     // is_continuation = 1
+  if (!threadpool_create_task (continuator->threadpool, continuator->work, continuator->job.data, continuator->job.data_delete, /* is_continuation = */ 1))
   {
     fprintf (stderr, "%s: %s\n", __func__, _("Continuation failed."));
     continuator->threadpool->nb_failed_tasks++;
@@ -503,6 +503,24 @@ static size_t
 threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threadpool *threadpool, void *job), void *job, void (*job_delete) (void *job), int is_continuation)
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
+  if (!is_continuation)
+    switch (threadpool->property)
+    {
+      case ONE_TASK:
+        if (threadpool->nb_succeeded_tasks || threadpool->nb_failed_tasks)
+          work = 0;
+        break;
+      case ONE_SUCCESSFUL_TASK:
+        if (threadpool->nb_succeeded_tasks)
+          work = 0;
+        break;
+      case ALL_SUCCESSFUL_TASKS:
+        if (threadpool->nb_failed_tasks)
+          work = 0;
+        break;
+      case ALL_TASKS:
+      default:
+    }
   if (!work)                    // Cancel task immediately.
   {
     threadpool->nb_submitted_tasks++;

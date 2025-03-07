@@ -21,9 +21,9 @@ extern const size_t SEQUENTIAL;
 typedef enum
 {
   ALL_TASKS,                    // Runs all submitted tasks.
-  ALL_SUCCESSFUL_TASKS,         // Runs pending tasks until one fails. Cancel others.
-  ONE_TASK,                     // Runs one pending task. Cancel others.
-  ONE_SUCCESSFUL_TASK,          // Runs pending tasks until one succeeds. Cancel others.
+  ALL_SUCCESSFUL_TASKS,         // Runs submitted tasks until one fails. Cancel other (already or to be) submitted tasks.
+  ONE_TASK,                     // Runs one submitted task. Cancel other (already or to be) submitted tasks.
+  ONE_SUCCESSFUL_TASK,          // Runs submitted tasks until one succeeds. Cancel other (already or to be) submitted tasks.
 } threadpool_property;
 struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, threadpool_property property);
 

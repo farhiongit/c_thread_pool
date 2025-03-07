@@ -259,7 +259,7 @@ main (int argc, char *argv[])
   setlocale (LC_ALL, "fr_FR.UTF-8");    // File listofwords is a list of french words.
 
   struct tp1_global tp1_global = { "liste.de.mots.francais.frgut.txt" };
-  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global, ALL_SUCCESSFUL_TASKS);
+  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global, ALL_TASKS);
   threadpool_set_global_resource_manager (tp1, tp1_res_alloc, tp1_res_dealloc);
   threadpool_set_monitor (tp1, threadpool_monitor_to_terminal, stderr, 0);
   fprintf (stderr, "Searching for matching words...\n");
