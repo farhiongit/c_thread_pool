@@ -449,21 +449,20 @@ thread_worker_runner (void *args)
         Worker_context.current_task = &old_elem->task;
         thrd_honored (mtx_unlock (&threadpool->mutex)); // Unlock
         int ret = old_elem->task.work (threadpool, old_elem->task.job.data);    //<<<<<<<<<< work <<<<<<<<<<< (N.B.: work could itself add tasks by calling 'threadpool_add_task').
+        if (old_elem->task.to_be_continued)
+          /* Nothing */ ;
+        else if ((threadpool->property == ALL_SUCCESSFUL_TASKS && ret != EXIT_SUCCESS)
+                 || (threadpool->property == ONE_SUCCESSFUL_TASK && ret == EXIT_SUCCESS) || threadpool->property == ONE_TASK)
+          threadpool_cancel_task (threadpool, ALL_PENDING_TASKS);
         thrd_honored (mtx_lock (&threadpool->mutex));   // Relock
         Worker_context.current_task = 0;
         assert (threadpool->nb_processing_tasks--);
         if (old_elem->task.to_be_continued)
           /* Nothing */ ;
+        else if (ret != EXIT_SUCCESS)
+          threadpool->nb_failed_tasks++;
         else
-        {
-          if (ret != EXIT_SUCCESS)
-            threadpool->nb_failed_tasks++;
-          else
-            threadpool->nb_succeeded_tasks++;
-          if ((threadpool->property == ALL_SUCCESSFUL_TASKS && ret != EXIT_SUCCESS)
-              || (threadpool->property == ONE_SUCCESSFUL_TASK && ret == EXIT_SUCCESS) || threadpool->property == ONE_TASK)
-            threadpool_cancel_task (threadpool, ALL_PENDING_TASKS);
-        }
+          threadpool->nb_succeeded_tasks++;
       }
       threadpool_monitor_call (threadpool);
       if (!old_elem->task.to_be_continued && old_elem->task.job.data_delete)    // Call to task.job.data_delete is MT-safe (guarded by threadpool->mutex)

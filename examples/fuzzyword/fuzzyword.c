@@ -103,7 +103,7 @@ tp2_worker (struct threadpool *threadpool, void *arg)
   struct tp2_job *tp2 = arg;
   tp2->result.d = dld (wcslen (tp2->input.word), tp2->input.word, wcslen (tp2->input.fuzzyword), tp2->input.fuzzyword, 1);
   tp2->result.match = tp2->input.realword;
-  return 0;
+  return EXIT_SUCCESS;
 }
 
 // ----- Thread pool 1
@@ -188,7 +188,8 @@ static void
 tp1_job_free (void *arg)
 {
   struct tp1_job *ta = arg;
-  fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);     // Job post-processing.
+  if (ta->result.match_ref)
+    fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);   // Job post-processing.
 
   free (ta->input.wa);
   free (ta);
@@ -200,10 +201,10 @@ tp1_job_free (void *arg)
 static const wchar_t *
 get_match (wchar_t *wa, size_t nb_lines, const wchar_t (*const lines)[100], wchar_t *const *const colllines)
 {
-  size_t start = ((size_t) rand ()) % nb_lines;
+  size_t start = ((size_t) rand ()) % nb_lines; // To avoid false-sharing.
   struct tp2_global tp2_global = {.match = 0,.dmatch = ULONG_MAX };
   for (size_t i = 0; !tp2_global.match && i < nb_lines; i++)
-    if (!wcscmp (wa, lines[(i + start) % nb_lines]))    // To avoid false-sharing.
+    if (!wcscmp (wa, lines[(i + start) % nb_lines]))
       tp2_global.match = lines[(i + start) % nb_lines]; // Perfect match found.
 
   if (!tp2_global.match)        // Search for an approximate match.
@@ -249,7 +250,7 @@ tp1_worker (struct threadpool *threadpool, void *arg)
   struct tp1_job *ta = arg;
   struct tp1_resource *tp1_resource = threadpool_global_resource ();
   ta->result.match_ref = get_match (ta->input.wa, tp1_resource->nb_lines, tp1_resource->lines, tp1_resource->colllines);
-  return 0;
+  return EXIT_SUCCESS;
 }
 
 int
@@ -258,7 +259,7 @@ main (int argc, char *argv[])
   setlocale (LC_ALL, "fr_FR.UTF-8");    // File listofwords is a list of french words.
 
   struct tp1_global tp1_global = { "liste.de.mots.francais.frgut.txt" };
-  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global, ALL_TASKS);
+  struct threadpool *tp1 = threadpool_create_and_start (SEQUENTIAL, &tp1_global, ALL_SUCCESSFUL_TASKS);
   threadpool_set_global_resource_manager (tp1, tp1_res_alloc, tp1_res_dealloc);
   threadpool_set_monitor (tp1, threadpool_monitor_to_terminal, stderr, 0);
   fprintf (stderr, "Searching for matching words...\n");

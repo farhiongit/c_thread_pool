@@ -146,9 +146,9 @@ Nevertheless, the actual number of workers will be limited by the operating syst
 The third argument is either :
 
 - `ALL_TASKS` : Run all submitted tasks (usual expected standard behaviour).
-- `ALL_SUCCESSFUL_TASKS` : Run pending tasks until at least one fails. Cancel others.
+- `ALL_SUCCESSFUL_TASKS` : Run pending tasks until at least one fails (returns `EXIT_FAILURE`). Cancel others.
 - `ONE_TASK` : Run only at least one pending task. Cancel others.
-- `ONE_SUCCESSFUL_TASK` : Run pending tasks until at least one succeeds. Cancel others.
+- `ONE_SUCCESSFUL_TASK` : Run pending tasks until at least one succeeds (returns `EXIT_SUCCESS`). Cancel others.
 
 ###### Options
 
