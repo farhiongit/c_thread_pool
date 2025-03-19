@@ -37,15 +37,19 @@
 #define threadpool_runoff_predicate(threadpool) (threadpool_is_done_predicate(threadpool) && (threadpool)->nb_alive_workers == 0)
 
 #ifdef __GLIBC__
-size_t const NB_CPU = 0;
+size_t const TP_WORKER_NB_CPU = 0;
 #endif
-size_t const SEQUENTIAL = 1;
-size_t const ALL_PENDING_TASKS = SIZE_MAX - 2;
-size_t const NEXT_PENDING_TASK = SIZE_MAX - 1;
-size_t const LAST_PENDING_TASK = SIZE_MAX;
+size_t const TP_WORKER_SEQUENTIAL = 1;
+size_t const TP_CANCEL_ALL_PENDING_TASKS = SIZE_MAX - 2;
+size_t const TP_CANCEL_NEXT_PENDING_TASK = SIZE_MAX - 1;
+size_t const TP_CANCEL_LAST_PENDING_TASK = SIZE_MAX;
+const tp_property_t TP_RUN_ALL_TASKS = 1;       // Runs all submitted tasks.
+const tp_property_t TP_RUN_ALL_SUCCESSFUL_TASKS = 2;    // Runs submitted tasks until one fails. Cancel automatically other (already or to be) submitted tasks.
+const tp_property_t TP_RUN_ONE_SUCCESSFUL_TASK = 4;     // Runs submitted tasks until one succeeds. Cancel automatically other (already or to be) submitted tasks.
+
 struct threadpool
 {
-  threadpool_property property;
+  tp_property_t property;
   size_t requested_nb_workers, max_nb_workers;
   thrd_t *worker_id /* [requested_nb_workers] */ ;
   mtx_t mutex;
@@ -292,7 +296,7 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
   threadpool->monitor.argument = a;
   threadpool->monitor.filter = filter;
   if (new && !threadpool->monitor.processor)
-    threadpool->monitor.processor = threadpool_create_and_start (SEQUENTIAL, &threadpool->monitor.last_time, ALL_TASKS);
+    threadpool->monitor.processor = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, &threadpool->monitor.last_time, TP_RUN_ALL_TASKS);
   threadpool_monitor_call (threadpool);
   thrd_honored (mtx_unlock (&threadpool->mutex));
 }
@@ -358,7 +362,7 @@ threadpool_init (void)          // Called once.
 }
 
 struct threadpool *
-threadpool_create_and_start (size_t nb_workers, void *global_data, threadpool_property property)
+threadpool_create_and_start (size_t nb_workers, void *global_data, tp_property_t property)
 {
   call_once (&THREADPOOL_INIT, threadpool_init);
   struct threadpool *threadpool = calloc (1, sizeof (*threadpool));     // All attributes are set to 0 (including pointers).
@@ -451,9 +455,8 @@ thread_worker_runner (void *args)
         int ret = old_elem->task.work (threadpool, old_elem->task.job.data);    //<<<<<<<<<< work <<<<<<<<<<< (N.B.: work could itself add tasks by calling 'threadpool_add_task').
         if (old_elem->task.to_be_continued)
           /* Nothing */ ;
-        else if ((threadpool->property == ALL_SUCCESSFUL_TASKS && ret != EXIT_SUCCESS)
-                 || (threadpool->property == ONE_SUCCESSFUL_TASK && ret == EXIT_SUCCESS) || threadpool->property == ONE_TASK)
-          threadpool_cancel_task (threadpool, ALL_PENDING_TASKS);
+        else if ((threadpool->property == TP_RUN_ALL_SUCCESSFUL_TASKS && ret != EXIT_SUCCESS) || (threadpool->property == TP_RUN_ONE_SUCCESSFUL_TASK && ret == EXIT_SUCCESS))
+          threadpool_cancel_task (threadpool, TP_CANCEL_ALL_PENDING_TASKS);     // Cancel automatically other already submitted tasks.
         thrd_honored (mtx_lock (&threadpool->mutex));   // Relock
         Worker_context.current_task = 0;
         assert (threadpool->nb_processing_tasks--);
@@ -504,30 +507,16 @@ threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threa
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
   if (!is_continuation)
-    switch (threadpool->property)
-    {
-      case ONE_TASK:
-        if (threadpool->nb_succeeded_tasks || threadpool->nb_failed_tasks)
-          work = 0;
-        break;
-      case ONE_SUCCESSFUL_TASK:
-        if (threadpool->nb_succeeded_tasks)
-          work = 0;
-        break;
-      case ALL_SUCCESSFUL_TASKS:
-        if (threadpool->nb_failed_tasks)
-          work = 0;
-        break;
-      case ALL_TASKS:
-      default:
-    }
+    if ((threadpool->property == TP_RUN_ONE_SUCCESSFUL_TASK && threadpool->nb_succeeded_tasks)
+        || (threadpool->property == TP_RUN_ALL_SUCCESSFUL_TASKS && threadpool->nb_failed_tasks))
+      work = 0;                 // Cancel automatically new submitted tasks.
   if (!work)                    // Cancel task immediately.
   {
     threadpool->nb_submitted_tasks++;
     threadpool->nb_canceled_tasks++;
     if (job_delete)
       job_delete (job);
-    if (++threadpool->nb_created_tasks == ALL_PENDING_TASKS)
+    if (++threadpool->nb_created_tasks == TP_CANCEL_ALL_PENDING_TASKS)
       threadpool->nb_created_tasks = 1; // Overflow. Wrap around.
     size_t id = threadpool->nb_created_tasks;   // task.id starts from 1.
     thrd_honored (mtx_unlock (&threadpool->mutex));
@@ -552,7 +541,7 @@ threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threa
     threadpool->in->next = new_elem;
     threadpool->in = new_elem;
   }
-  if (++threadpool->nb_created_tasks == ALL_PENDING_TASKS)
+  if (++threadpool->nb_created_tasks == TP_CANCEL_ALL_PENDING_TASKS)
     threadpool->nb_created_tasks = 1;   // Overflow. Wrap around.
   size_t id = new_elem->task.id = threadpool->nb_created_tasks; // task.id starts from 1.
   if (!is_continuation)
@@ -631,7 +620,7 @@ threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
 {
   size_t ret = 0;
   thrd_honored (mtx_lock (&threadpool->mutex));
-  if (task_id == LAST_PENDING_TASK)
+  if (task_id == TP_CANCEL_LAST_PENDING_TASK)
   {
     struct elem *last = 0;
     for (struct elem * e = threadpool->out; e; e = e->next)
@@ -646,12 +635,12 @@ threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
   else
     for (struct elem * e = threadpool->out; e; e = e->next)
     {
-      if (!((task_id == NEXT_PENDING_TASK && e->task.work) || e->task.id == task_id || task_id == ALL_PENDING_TASKS))
+      if (!((task_id == TP_CANCEL_NEXT_PENDING_TASK && e->task.work) || e->task.id == task_id || task_id == TP_CANCEL_ALL_PENDING_TASKS))
         continue;
       if (e->task.work)
         ret++;
       e->task.work = 0;         // The job won't be processed by thread_worker_runner.
-      if (task_id == NEXT_PENDING_TASK || e->task.id == task_id)
+      if (task_id == TP_CANCEL_NEXT_PENDING_TASK || e->task.id == task_id)
         break;
     }
   if (ret)

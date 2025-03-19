@@ -18,26 +18,29 @@ Create a static and dynamic library using :
 $ make libs
 cc -O -fPIC   -c -o wqm.o wqm.c
 ar rcs libwqm.a wqm.o
-libwqm.a:wqm.o:0000000000000200 R ALL_TASKS
-libwqm.a:wqm.o:00000000000001f0 R LAST_TASK
-libwqm.a:wqm.o:0000000000000210 R NB_CPU
-libwqm.a:wqm.o:00000000000001f8 R NEXT_TASK
-libwqm.a:wqm.o:0000000000000208 R SEQUENTIAL
-libwqm.a:wqm.o:0000000000000eac T threadpool_add_task
-libwqm.a:wqm.o:00000000000022ff T threadpool_cancel_task
-libwqm.a:wqm.o:0000000000000baf T threadpool_create_and_start
-libwqm.a:wqm.o:00000000000022d6 T threadpool_global_data
-libwqm.a:wqm.o:0000000000002773 T threadpool_global_resource
-libwqm.a:wqm.o:0000000000000b18 T threadpool_monitor_every_100ms
-libwqm.a:wqm.o:00000000000008ad T threadpool_monitor_to_terminal
-libwqm.a:wqm.o:000000000000262e T threadpool_set_global_resource_manager
-libwqm.a:wqm.o:000000000000253f T threadpool_set_idle_timeout
-libwqm.a:wqm.o:00000000000017b5 T threadpool_set_monitor
-libwqm.a:wqm.o:000000000000279f T threadpool_set_worker_local_data_manager
-libwqm.a:wqm.o:00000000000005c5 T threadpool_task_continuation
-libwqm.a:wqm.o:000000000000162b T threadpool_task_continue
-libwqm.a:wqm.o:00000000000018d1 T threadpool_wait_and_destroy
-libwqm.a:wqm.o:0000000000001b1d T threadpool_worker_local_data
+libwqm.a:wqm.o:0000000000000a8f T threadpool_add_task
+libwqm.a:wqm.o:000000000000175e T threadpool_cancel_task
+libwqm.a:wqm.o:000000000000077c T threadpool_create_and_start
+libwqm.a:wqm.o:0000000000001735 T threadpool_global_data
+libwqm.a:wqm.o:00000000000023cb T threadpool_global_resource
+libwqm.a:wqm.o:00000000000006e5 T threadpool_monitor_every_100ms
+libwqm.a:wqm.o:000000000000047a T threadpool_monitor_to_terminal
+libwqm.a:wqm.o:0000000000002286 T threadpool_set_global_resource_manager
+libwqm.a:wqm.o:0000000000002197 T threadpool_set_idle_timeout
+libwqm.a:wqm.o:00000000000013a8 T threadpool_set_monitor
+libwqm.a:wqm.o:00000000000023f7 T threadpool_set_worker_local_data_manager
+libwqm.a:wqm.o:0000000000000252 T threadpool_task_continuation
+libwqm.a:wqm.o:0000000000000206 T threadpool_task_continue
+libwqm.a:wqm.o:00000000000014c9 T threadpool_wait_and_destroy
+libwqm.a:wqm.o:0000000000001715 T threadpool_worker_local_data
+libwqm.a:wqm.o:0000000000000230 R TP_CANCEL_ALL_PENDING_TASKS
+libwqm.a:wqm.o:0000000000000220 R TP_CANCEL_LAST_PENDING_TASK
+libwqm.a:wqm.o:0000000000000228 R TP_CANCEL_NEXT_PENDING_TASK
+libwqm.a:wqm.o:0000000000000214 R TP_RUN_ALL_SUCCESSFUL_TASKS
+libwqm.a:wqm.o:0000000000000218 R TP_RUN_ALL_TASKS
+libwqm.a:wqm.o:0000000000000210 R TP_RUN_ONE_SUCCESSFUL_TASK
+libwqm.a:wqm.o:0000000000000240 R TP_WORKER_NB_CPU
+libwqm.a:wqm.o:0000000000000238 R TP_WORKER_SEQUENTIAL
 cc -shared -o libwqm.so wqm.o
 ```
 
@@ -130,14 +133,14 @@ The API is defined in file `wqm.h`.
 ```c
 struct threadpool *threadpool_create_and_start (size_t nb_workers,
                                                 void *global_data,
-                                                threadpool_property property)
+                                                tp_property_t property)
 ```
 
 A thread pool is declared and started with a call to `threadpool_create_and_start ()`.
 
 The first argument `nb_workers` is the number of requested workers, that is the maximum number of tasks that should be executed in parallel by the system.
-- `NB_CPU` can be used as first argument to fit to the number of processors currently available in the system (as returned by `get_nprocs ()` with GNU C standard library).
-- `SEQUENTIAL` can be used as first argument to create a sequential thread pool: tasks will be executed asynchronously, one at a time, and in the order there were submitted. 
+- `TP_NB_CPU` can be used as first argument to fit to the number of processors currently available in the system (as returned by `get_nprocs ()` with GNU C standard library).
+- `TP_SEQUENTIAL` can be used as first argument to create a sequential thread pool: tasks will be executed asynchronously, one at a time, and in the order there were submitted.
 
 The maximum number of workers can be defined to a higher value than the number of CPUs as workers will be started only when solicited and will be released when unused after an idle time.
 
@@ -145,10 +148,9 @@ Nevertheless, the actual number of workers will be limited by the operating syst
 
 The third argument is either :
 
-- `ALL_TASKS` : Run all submitted tasks (usual expected standard behaviour).
-- `ALL_SUCCESSFUL_TASKS` : Run submitted tasks until at least one fails (returns `EXIT_FAILURE`). Cancel other (already or to be) submitted tasks.
-- `ONE_TASK` : Run at least one submitted task. Cancel other (already or to be) submitted tasks.
-- `ONE_SUCCESSFUL_TASK` : Run submitted tasks until at least one succeeds (returns `EXIT_SUCCESS`). Cancel other (already or to be) submitted tasks.
+- `TP_RUN_ALL_TASKS` : Run all submitted tasks (usual expected standard behaviour).
+- `TP_RUN_ALL_SUCCESSFUL_TASKS` : Run submitted tasks until at least one fails (returns `EXIT_FAILURE`). Cancel automatically other (already or to be) submitted tasks.
+- `TP_RUN_ONE_SUCCESSFUL_TASK` : Run submitted tasks until at least one succeeds (returns `EXIT_SUCCESS`). Cancel automatically other (already or to be) submitted tasks.
 
 ###### Options
 
@@ -260,9 +262,9 @@ Previously submitted and still pending tasks can be cancelled.
 `task_id` is :
 
 - either a unique id returned by a previous call to `threadpool_add_task` ;
-- or `ALL_PENDING_TASKS` to cancel all still pending tasks ;
-- or `NEXT_PENDING_TASK` to cancel the next still pending submitted task (it can be used several times in a row) ;
-- or `LAST_PENDING_TASK` to cancel the last still pending submitted task (it can be used several times in a row).
+- or `TP_CANCEL_ALL_PENDING_TASKS` to cancel all still pending tasks ;
+- or `TP_CANCEL_NEXT_PENDING_TASK` to cancel the next still pending submitted task (it can be used several times in a row) ;
+- or `TP_CANCEL_LAST_PENDING_TASK` to cancel the last still pending submitted task (it can be used several times in a row).
 
 Canceled tasks won't be processed, but `job_delete`, as optionally passed to `threadpool_add_task`, will be called though.
 

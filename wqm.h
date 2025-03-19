@@ -14,18 +14,15 @@ struct threadpool;              // Abstract data type : opaque record of a threa
 // Arguments 'global_data' can hold a global context of the thread pool and is optional.
 // Returns 0 (with errno = ENOMEM) on error, a pointer to the created threadpool otherwise (with errno = ENOMEM if not all required workers could be created).
 #  ifdef __GLIBC__
-extern const size_t NB_CPU;
+extern const size_t TP_WORKER_NB_CPU;
 #  endif
-extern const size_t SEQUENTIAL;
+extern const size_t TP_WORKER_SEQUENTIAL;
 
-typedef enum
-{
-  ALL_TASKS,                    // Runs all submitted tasks.
-  ALL_SUCCESSFUL_TASKS,         // Runs submitted tasks until one fails. Cancel other (already or to be) submitted tasks.
-  ONE_TASK,                     // Runs one submitted task. Cancel other (already or to be) submitted tasks.
-  ONE_SUCCESSFUL_TASK,          // Runs submitted tasks until one succeeds. Cancel other (already or to be) submitted tasks.
-} threadpool_property;
-struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, threadpool_property property);
+typedef int tp_property_t;
+extern const tp_property_t TP_RUN_ALL_TASKS;    // Runs all submitted tasks.
+extern const tp_property_t TP_RUN_ALL_SUCCESSFUL_TASKS; // Runs submitted tasks until one fails. Cancel automatically other (already or to be) submitted tasks.
+extern const tp_property_t TP_RUN_ONE_SUCCESSFUL_TASK;  // Runs submitted tasks until one succeeds. Cancel automatically other (already or to be) submitted tasks.
+struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, tp_property_t property);
 
 // Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);
@@ -50,9 +47,9 @@ size_t threadpool_add_task (struct threadpool *threadpool, int (*work) (struct t
 
 // Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_PENDING_TASKS, or the next submitted task if task_id is equal to NEXT_PENDING_TASK, or the last if equal to LAST_PENDING_TASK.
 // Returns the number of cancelled tasks.
-extern const size_t ALL_PENDING_TASKS;  // Cancels all pending tasks
-extern const size_t NEXT_PENDING_TASK;  // Cancels next pending task (in submission order)
-extern const size_t LAST_PENDING_TASK;  // Cancels last pending tasks (in submission order)
+extern const size_t TP_CANCEL_ALL_PENDING_TASKS;        // Cancels all pending tasks
+extern const size_t TP_CANCEL_NEXT_PENDING_TASK;        // Cancels next pending task (in submission order)
+extern const size_t TP_CANCEL_LAST_PENDING_TASK;        // Cancels last pending tasks (in submission order)
 size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id);
 
 // Once all tasks have been submitted to the threadpool, 'threadpool_wait_and_destroy' waits for all the tasks to be finished and thereafter destroys the threadpool.
