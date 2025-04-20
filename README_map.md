@@ -114,17 +114,17 @@ The second argument `context` receives the pointer passed to `map_traverse`, `ma
 The third argument `remove` receives a non-null pointer. If (and only if) the operator sets `*remove` to a non-zero value,
 
   - the element will be removed from the map thread-safely ;
-  - the operator **should** free the data passed to it if it was allocated dynamically (otherwise it would be lost).
+  - the operator **should** keep track and ultimately free the data passed to it if it was allocated dynamically (otherwise it would be lost).
 
 
-Should return `1` if the operator should be applied on further elements of the map, `0` otherwise.
+The `map_operator` should return `1` if the operator should be applied on further elements of the map, `0` otherwise.
 
 
 In other words, as soon as the operator returns `0`, it stops `map_traverse`, `map_traverse_backward` or `map_find_key`.
 
 
-#### Helper map operator to retrieve an element
-This map operator simply retrieves and removes an element of the map.
+#### Helper map operator to retrieve and remove one element
+This map operator simply retrieves and removes one element from the map.
 
 
 ```c
@@ -133,12 +133,12 @@ extern map_operator MAP_REMOVE;
 > Its use is **not recommended** though. Actions on an element should better be directly integrated in the `map_operator` function.
 
 
-If the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
-the helper operator `MAP_REMOVE` removes and retrieves the first element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
-and sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
+The helper operator `MAP_REMOVE` removes and retrieves an element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
+and, if the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
+it sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
 
 
-`context` **should be** the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
+`context` **should be** 0 or the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
 
 
 Example
@@ -154,6 +154,16 @@ If `m` is a map of elements of type T and `sel` a map_selector, the following pi
 	    map_insert_data (m, data);
 	  }
 	
+#### Helper map operator to move elements from one map to another
+This map operator moves an element of the map to another **different** map passed in the argument `context` of `map_find_key`, `map_traverse` or `map_traverse_backward`.
+
+
+N.B.: A destination map identical to the source map would **deadly lock** the calling thread.
+
+
+```c
+extern map_operator MAP_MOVE_TO;
+```
 ## Interface
 ### Create a map
 ```c

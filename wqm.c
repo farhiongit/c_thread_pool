@@ -22,7 +22,7 @@
 
 #define assert(cond) assert2((cond), (#cond))
 #define thrd_honored(cond) do {int __c = (cond); assert2((__c) == thrd_success || (__c) == thrd_timedout || (__c) == thrd_busy, (#cond)); } while (0)
-#define assert2(cond, text) do { if (!(cond)) { fprintf (stderr, "%s:%d:%s: condition \"%s\" failed.\n", __FILE__, __LINE__, __func__, (text)); abort (); } } while (0)
+#define assert2(cond, text) do { if (!(cond)) { fprintf (stderr, "%s:%d:%s: condition \"%s\" failed. Abort.\n", __FILE__, __LINE__, __func__, (text)); abort (); } } while (0)
 #ifndef i18n_init
 #  define _(s) (s)
 #  define i18n_init
@@ -432,7 +432,7 @@ thread_worker_runner (void *args)
       int cnd;
       if (threadpool->nb_async_tasks)
         thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));       // Wait for continuators to be processed (threadpool_task_continue) or to timeout (threadpool_task_continuation_timeout_handler).
-      else if ((cnd = cnd_timedwait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex, &timeout)) == thrd_timedout)       // Wait for condition to be signaled or until after the TIME_UTC-based calendar time pointed to by &timeout
+      else if ((cnd = cnd_timedwait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex, &timeout)) == thrd_timedout)       // Wait for condition to be signalled or until after the TIME_UTC-based calendar time pointed to by &timeout
         break;                  // Timeout: time to end the worker.
       else
         thrd_honored (cnd);

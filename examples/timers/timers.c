@@ -207,6 +207,7 @@ main (void)
   map *li;
   for (int i = 1; i <= 4; i++)
   {
+    puts ("============================================================");
     switch (i)
     {
       case 1:
@@ -251,6 +252,18 @@ main (void)
       map_traverse (li, print_data, 0, 0);
       fprintf (stdout, "\n");
     }
+
+    map_insert_data (li, "r");
+    map_traverse (li, print_data, 0, 0);
+    fprintf (stdout, "\n");
+    map *lj = map_create (0, 0, 0, MAP_NONE);
+    map_find_key (li, "r", MAP_MOVE_TO, lj);
+    map_traverse (li, print_data, 0, 0);
+    fprintf (stdout, "\n");
+    map_traverse (lj, print_data, 0, 0);
+    fprintf (stdout, "\n");
+    map_traverse (lj, remove_all_data, 0, 0);
+    map_destroy (lj);
 
     map_find_key (li, "c", remove_all_data, 0);
     map_traverse (li, print_data, 0, 0);

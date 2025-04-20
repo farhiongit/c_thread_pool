@@ -335,12 +335,7 @@ map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, 
 static int
 _MAP_REMOVE (void *data, void *res, int *remove)
 {
-  if (!res)
-  {
-    fprintf (stderr, "%s: %s\n", "MAP_REMOVE", "Context must not be a null pointer.");
-    errno = EINVAL;
-  }
-  else
+  if (res)
   {
     *(void **) res = data;      // *res is supposed to be a pointer here.
     *remove = 1;
@@ -349,6 +344,21 @@ _MAP_REMOVE (void *data, void *res, int *remove)
 }
 
 map_operator MAP_REMOVE = _MAP_REMOVE;
+
+static int
+_MAP_MOVE (void *data, void *res, int *remove)
+{
+  if (!res)
+  {
+    fprintf (stderr, "%s: %s\n", "MAP_MOVE", "Context must not be a null pointer.");
+    errno = EINVAL;
+    return 0;
+  }
+  // if res is the same as the map containing data, i.e. (map *)res is already locked, ...
+  return (*remove = map_insert_data (res, data));
+}
+
+map_operator MAP_MOVE_TO = _MAP_MOVE;
 
 size_t
 map_size (map *m)
