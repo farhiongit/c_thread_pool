@@ -11,11 +11,11 @@ The interface has only 7 functions to do everything:
 
 - `map_create`
 - `map_destroy`
-- `map_size`
-- `map_insert_data`
-- `map_find_key`
-- `map_traverse`
-- `map_traverse_backward`
+- `map_size` (MT-safe)
+- `map_insert_data` (MT-safe)
+- `map_find_key` (MT-safe)
+- `map_traverse` (MT-safe)
+- `map_traverse_backward` (MT-safe)
 
 ## Type definitions
 
@@ -111,10 +111,13 @@ The data of the element of the map is passed as the first argument of the `map_o
 The second argument `context` receives the pointer passed to `map_traverse`, `map_traverse_backward` and `map_find_key` (as last argument).
 
 
-The third argument `remove` receives a non-null pointer. If (and only if) the operator sets `*remove` to a non-zero value,
+The third argument `remove` receives a non-null pointer for which `*remove` is set to `0`.
+
+
+If (and only if) the operator sets `*remove` to a non-zero value,
 
   - the element will be removed from the map thread-safely ;
-  - the operator **should** keep track and ultimately free the data passed to it if it was allocated dynamically (otherwise it would be lost).
+  - the operator **should** keep track and ultimately free the data passed to it if it was allocated dynamically (otherwise data would be lost in memory leaks).
 
 
 The `map_operator` should return `1` if the operator should be applied on further elements of the map, `0` otherwise.
@@ -134,11 +137,11 @@ extern map_operator MAP_REMOVE;
 
 
 The helper operator `MAP_REMOVE` removes and retrieves an element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
-and, if the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a pointer,
-it sets the pointer `context` to the data of this element. Otherwise `context` is left unchanged.
+and, if the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a non null pointer,
+it sets the pointer `context` to the data of this element.
 
 
-`context` **should be** 0 or the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
+`context` **should be** `0` or the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
 
 
 Example
@@ -154,6 +157,19 @@ If `m` is a map of elements of type T and `sel` a map_selector, the following pi
 	    map_insert_data (m, data);
 	  }
 	
+#### Helper map operator to remove all elements
+This map operator removes all the element from the map.
+
+
+```c
+extern map_operator MAP_REMOVE_ALL;
+```
+the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` should be `0` or a pointer to a destructor function with signature void (*)(void * ptr).
+
+
+This destructor is applied to each element of the map.
+
+
 #### Helper map operator to move elements from one map to another
 This map operator moves an element of the map to another **different** map passed in the argument `context` of `map_find_key`, `map_traverse` or `map_traverse_backward`.
 
@@ -288,6 +304,9 @@ size_t map_find_key (struct map *l, const void *key, map_operator op, void *cont
 If `get_key` and `cmp_key` are not null, applies `operator` on the data of the elements in the map that matches the key (for which `cmp_key` returns `0`), as long as `op` returns non-zero.
 
 
+Elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while finding elements.
+
+
 `context` is passed as the second argument of operator `op`.
 
 
@@ -304,10 +323,13 @@ size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
 ```c
 size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *context);
 ```
-Applies the operator `op` on all the data stored in the map as long as the operator `op` returns non-zero, from the first element to the last or the other way round.
+Applies the operator `op` on all the data stored in the map as long as the operator `op` returns non-zero, from the first element to the last (resp. the other way round).
 
 
-If `sel` is not null, `op` is applied only to `data` for which the selector `sel` returns non-zero. `map_traverse` then behaves as if the operator `op` would start with: `if (!sel (data, context)) return 1;`.
+Elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while traversing elements.
+
+
+If `sel` is not null, `op` is applied only to `data` for which the selector `sel` returns non-zero. `map_traverse` (resp.`map_traverse_backward`) then behaves as if the operator `op` would start with: `if (!sel (data, context)) return 1;`.
 
 
 `context` is passed as the second argument of operator `op` and selector `sel`.

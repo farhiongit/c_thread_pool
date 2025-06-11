@@ -336,14 +336,26 @@ static int
 _MAP_REMOVE (void *data, void *res, int *remove)
 {
   if (res)
-  {
     *(void **) res = data;      // *res is supposed to be a pointer here.
-    *remove = 1;
-  }
+  *remove = 1;
   return 0;
 }
 
 map_operator MAP_REMOVE = _MAP_REMOVE;
+
+static int
+_MAP_REMOVE_ALL (void *data, void *res, int *remove)
+{
+  if (res)
+  {
+    void (*dtor) (void *) = res;
+    dtor (data);      // *res is supposed to be a pointer to a destructor here.
+  }
+  *remove = 1;
+  return 1;
+}
+
+map_operator MAP_REMOVE_ALL = _MAP_REMOVE_ALL;
 
 static int
 _MAP_MOVE (void *data, void *res, int *remove)

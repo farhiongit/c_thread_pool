@@ -12,11 +12,11 @@ all: doc run_examples
 
 .PHONY: help
 help:
-	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, cloc, doc or <language>/LC_MESSAGES/libwqm.mo"
+	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, test_map, callgraph, cloc, doc or <language>/LC_MESSAGES/libwqm.mo"
 
 #### Examples
 .PHONY: run_examples
-run_examples: qsip_wc_test fuzzyword intensive timers
+run_examples: qsip_wc_test fuzzyword intensive timers test_map
 
 .PHONY: qsip_wc_test
 qsip_wc_test: libs examples/qsip/qsip_wc_test
@@ -41,6 +41,12 @@ intensive: libs examples/intensive/intensive
 timers: libs examples/timers/timers
 	@echo "********* $@ ************"
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:. ./examples/timers/timers
+	@echo "*********************"
+
+.PHONY: test_map
+test_map: libs examples/timers/test_map
+	@echo "********* $@ ************"
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:. ./examples/timers/test_map
 	@echo "*********************"
 
 examples/qsip/qsip_wc_test: LDFLAGS+=-L.
@@ -72,6 +78,12 @@ examples/timers/timers: CPPFLAGS+=-I.
 examples/timers/timers: LDFLAGS+=-L.
 examples/timers/timers: LDLIBS=-lwqm -ltimer -lmap -lm -lrt
 examples/timers/timers: examples/timers/timers.c
+
+examples/timers/test_map: CFLAGS+=-std=c23
+examples/timers/test_map: CPPFLAGS+=-I.
+examples/timers/test_map: LDFLAGS+=-L.
+examples/timers/test_map: LDLIBS=-lmap
+examples/timers/test_map: examples/timers/test_map.c
 
 #### Tools
 .PHONY: callgraph
