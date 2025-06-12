@@ -178,6 +178,11 @@ size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
 size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *context);
 // Applies the operator `op` on all the data stored in the map as long as the operator `op` returns non-zero, from the first element to the last (resp. the other way round).
 // Elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while traversing elements.
+// Insertion while traversing should be done with care since an infinite loop will occur if, in `op`, an element is removed and :
+//
+//   - while traversing forward, at least an equal or greater element is inserted ;
+//   - while traversing backward, at least a lower element is inserted.
+//
 // If `sel` is not null, `op` is applied only to `data` for which the selector `sel` returns non-zero. `map_traverse` (resp.`map_traverse_backward`) then behaves as if the operator `op` would start with: `if (!sel (data, context)) return 1;`.
 // `context` is passed as the second argument of operator `op` and selector `sel`.
 // Returns the number of elements of the map on which the operator `op` has been applied.

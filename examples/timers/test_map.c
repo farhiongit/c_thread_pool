@@ -51,6 +51,7 @@ cmpip (const void *p1, const void *p2, void *arg)
   return *(const int*)p1 < *(const int*)p2 ? -1 : *(const int*)p1 > *(const int*)p2 ? 1 : 0; 
 }
 
+static int nop (int i) { return i ; }
 static int dbl (int i) { return 2 * i ; }
 static int dec (int i) { return i - 1 ; }
 
@@ -202,6 +203,10 @@ main (void)
   map_traverse (li, print_pi, 0, 0);
   fprintf (stdout, "\n");
   struct rai_args args;
+  args = (struct rai_args ){ nop, li };
+  map_traverse_backward (li, remove_apply_insert, 0, &args);
+  map_traverse (li, print_pi, 0, 0);
+  fprintf (stdout, "\n");
   args = (struct rai_args ){ dec, li };
   map_traverse (li, remove_apply_insert, 0, &args);
   map_traverse (li, print_pi, 0, 0);
