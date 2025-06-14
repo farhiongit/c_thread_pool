@@ -119,9 +119,9 @@ struct continuator_data
 };
 
 static const void *
-continuator_data_get_key (void *pa)
+continuator_data_get_key (const void *pa)
 {
-  struct continuator_data *a = pa;
+  const struct continuator_data *a = pa;
   return &a->uid;
 }
 

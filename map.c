@@ -24,7 +24,7 @@ struct map
   struct map_elem *first, *last, *root;
   mtx_t mutex;
   int (*cmp_key) (const void *, const void *, void *);
-  const void *(*get_key) (void *);
+  const void *(*get_key) (const void *);
   void *arg;
   int uniqueness, stable;       // Properties.
   size_t nb_elem;
@@ -120,7 +120,7 @@ _map_next (struct map_elem *e)
 }
 
 static size_t
-_map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res, int backward)
+_map_traverse (map *m, map_operator op, map_selector sel, void *res, int backward)
 {
   if (!m)
   {
@@ -150,13 +150,13 @@ _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel
 }
 
 static const void *
-_MAP_KEY_IS_DATA (void *data)
+_MAP_KEY_IS_DATA (const void *data)
 {
   return data;
 }
 
 struct map *
-map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key_a, const void *key_bb, void *arg), void *arg, int property)
+map_create (map_key_extractor get_key, map_key_comparator cmp_key, void *arg, int property)
 {
   if (!get_key && cmp_key)
     get_key = _MAP_KEY_IS_DATA;
@@ -275,19 +275,19 @@ map_insert_data (struct map *l, void *data)
 }
 
 size_t
-map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res)
+map_traverse (map *m, map_operator op, map_selector sel, void *res)
 {
   return _map_traverse (m, op, sel, res, 0);
 }
 
 size_t
-map_traverse_backward (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res)
+map_traverse_backward (map *m, map_operator op, map_selector sel, void *res)
 {
   return _map_traverse (m, op, sel, res, 1);
 }
 
 size_t
-map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, int *remove), void *res)
+map_find_key (struct map *l, const void *key, map_operator op, void *res)
 {
   if (!l->cmp_key)
   {

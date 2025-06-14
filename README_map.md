@@ -44,7 +44,7 @@ The key of the map is extracted from the data stored in it (generally but not ne
 
 | Type definition |
 | - |
-| const void \*(\*map\_key\_extractor) (void \*data) |
+| const void \*(\*map\_key\_extractor) (const void \*data) |
 
 > Functions of type `map_key_extractor` should not allocate memory dynamically.
 
@@ -60,9 +60,9 @@ Example:
 	    char* definition;
 	  };
 
-	  static const void* get_word (void* data)       // 'data' is supposed to be a pointer to 'struct entry'
+	  static const void* get_word (const void* data)       // 'data' is supposed to be a pointer to 'struct entry'
 	  {
-	    return &((struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
+	    return &((const struct entry *)data)->word;        // 'word' is declared as the subset of the 'data' that defines the key of the map.
 	  }
 
 
@@ -106,7 +106,7 @@ The type of a user-defined function that selects elements while traversing a map
 
 | Type definition |
 | - |
-| int (\*map\_selector) (void \*data, void \*context) |
+| int (\*map\_selector) (const void \*data, void \*context) |
 
 The data of the element of the map is passed as the first argument of the map_selector.
 

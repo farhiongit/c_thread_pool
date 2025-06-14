@@ -39,10 +39,10 @@ print_data (void *data, void *res, int *remove)
 }
 
 static int
-select_c (void *data, void *res)
+select_c (const void *data, void *res)
 {
   (void) res;
-  return (*(char *) data == 'c');
+  return (*(const char *) data == 'c');
 }
 
 static int
@@ -98,9 +98,10 @@ struct entry  // The type of the data stored in the map
   char* definition;
 };
 
-static const void* get_word (void* data)       // 'data' is supposed to be a pointer to 'struct entry'
+static const void*
+get_word (const void* data)       // 'data' is supposed to be a pointer to 'struct entry'
 {
-  return &((struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
+  return &((const struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
 }
 
 static int
@@ -113,6 +114,14 @@ cmp_word (const void *p1, const void *p2, void *arg)
   if (!ret)
     ret = w1->class > w2->class ? 1 : w1->class < w2->class ? -1 : 0;
   return ret;
+}
+
+static int
+sel_noun_masculine (const void *data, void *context)
+{
+  (void) context;
+  const struct entry *e = data;
+  return e->word.class == NOUN && e->gender == MASCULINE;
 }
 
 int
@@ -251,10 +260,12 @@ main (void)
   puts ("============================================================");
   map* dictionary = map_create (get_word, cmp_word, 0, MAP_STABLE);   // Dictionary. A word can have several definitions and therefore appear several times in the map.
   map_insert_data (dictionary, &(struct entry){{"Orange", NOUN}, FEMININE, "Fruit"});
+  map_insert_data (dictionary, &(struct entry){{"Abricot", NOUN}, MASCULINE, "Fruit"});
   map_insert_data (dictionary, &(struct entry){{"Orange", NOUN}, MASCULINE, "Colour"});
   map_insert_data (dictionary, &(struct entry){{"Orange", ADJECTIVE}, NONE, "Colour"});
   fprintf (stdout, "%lu element(s).\n", map_size (dictionary));
   fprintf (stdout, "%lu element(s).\n", map_traverse (dictionary, 0, 0, 0));
+  fprintf (stdout, "%lu element(s) found.\n", map_traverse (dictionary, 0, sel_noun_masculine, 0));
   fprintf (stdout, "%lu element(s) found.\n", map_find_key (dictionary, &(struct word){"Orange", NOUN}, 0, 0));
   fprintf (stdout, "%lu element(s) found.\n", map_find_key (dictionary, &(struct word){"Orange", ADJECTIVE}, 0, 0));
   fprintf (stdout, "%lu element(s) found.\n", map_find_key (dictionary, &(struct word){"Orange", VERB}, 0, 0));

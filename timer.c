@@ -30,9 +30,9 @@ static struct                   // Ordered list of struct timer_elem stored in a
 } Timers = { 0 };
 
 static const void *
-Timers_get_key (void *pa)
+Timers_get_key (const void *pa)
 {
-  struct timer_elem *a = pa;
+  const struct timer_elem *a = pa;
   return &a->timeout;
 }
 

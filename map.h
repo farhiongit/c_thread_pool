@@ -30,7 +30,7 @@ typedef struct map map;
 // ### Key
 // The key of the map is extracted from the data stored in it (generally but not necessarily a subset of it). A user-defined function of type `map_key_extractor` (passed to `map_create`) can be used to extract this subset.
 // `map_key_extractor` is the type of the user-defined function that should return a pointer to the the part of `data` that contains the key of the map.
-typedef const void *(*map_key_extractor) (void *data);
+typedef const void *(*map_key_extractor) (const void *data);
 // > Functions of type `map_key_extractor` should not allocate memory dynamically.
 /* Example:
 
@@ -43,9 +43,9 @@ typedef const void *(*map_key_extractor) (void *data);
     char* definition;
   };
 
-  static const void* get_word (void* data)       // 'data' is supposed to be a pointer to 'struct entry'
+  static const void* get_word (const void* data)       // 'data' is supposed to be a pointer to 'struct entry'
   {
-    return &((struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
+    return &((const struct entry *)data)->word;        // 'word' is declared as the subset of the 'data' that defines the key of the map.
   }
 
 */
@@ -74,7 +74,7 @@ typedef int (*map_key_comparator) (const void *key_a, const void *key_b, void *a
 
 // ### Selector on elements of the map
 // The type of a user-defined function that selects elements while traversing a map with `map_traverse` or `map_traverse_backward`. 
-typedef int (*map_selector) (void *data, void *context);
+typedef int (*map_selector) (const void *data, void *context);
 // The data of the element of the map is passed as the first argument of the map_selector.
 // The second argument `context` receives the pointer passed to `map_traverse` and `map_traverse_backward` (as last argument).
 // Should return `1` if the `data` conforms to the user-defined conditions (and should be selected by `map_traverse` or `map_traverse_backward`), `0` otherwise.
