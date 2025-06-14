@@ -122,7 +122,7 @@ _map_next (struct map_elem *e)
 static size_t
 _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel) (void *data, void *res), void *res, int backward)
 {
-  if (!m || !op)
+  if (!m)
   {
     errno = EINVAL;
     return 0;
@@ -135,7 +135,7 @@ _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel
     int go_on = 1;
     if (!sel || sel (e->data, res))
     {
-      go_on = op (e->data, res, &remove);
+      go_on = op ? op (e->data, res, &remove) : 1;
       nb_op++;
     }
     struct map_elem *n = backward ? _map_previous (e) : _map_next (e);
@@ -149,15 +149,17 @@ _map_traverse (map *m, int (*op) (void *data, void *res, int *remove), int (*sel
   return nb_op;
 }
 
+static const void *
+_MAP_KEY_IS_DATA (void *data)
+{
+  return data;
+}
+
 struct map *
 map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key_a, const void *key_bb, void *arg), void *arg, int property)
 {
   if (!get_key && cmp_key)
-  {
-    errno = EINVAL;
-    fprintf (stderr, "%s: %s\n", __func__, "Undefined key.");
-    return 0;
-  }
+    get_key = _MAP_KEY_IS_DATA;
   if (((property & MAP_UNIQUENESS) || get_key) && !cmp_key)
   {
     errno = EINVAL;
@@ -187,14 +189,6 @@ map_create (const void *(*get_key) (void *data), int (*cmp_key) (const void *key
   }
   return l;
 }
-
-static const void *
-_MAP_KEY_IS_DATA (void *data)
-{
-  return data;
-}
-
-map_key_extractor MAP_KEY_IS_DATA = _MAP_KEY_IS_DATA;
 
 int
 map_destroy (struct map *l)
@@ -301,7 +295,7 @@ map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, 
     errno = EPERM;
     return 0;
   }
-  if (!l || !key || !op)
+  if (!l || !key)
   {
     errno = EINVAL;
     return 0;
@@ -316,7 +310,7 @@ map_find_key (struct map *l, const void *key, int (*op) (void *data, void *res, 
     else if (cmp_key == 0)
     {
       int remove = 0;
-      int ret = op (upper->data, res, &remove);
+      int ret = op ? op (upper->data, res, &remove) : 1;
       struct map_elem *next = upper->ge;
       nb_op++;
       if (remove)
@@ -341,7 +335,7 @@ _MAP_REMOVE (void *data, void *res, int *remove)
   return 0;
 }
 
-map_operator MAP_REMOVE = _MAP_REMOVE;
+map_operator MAP_REMOVE_ONE = _MAP_REMOVE;
 
 static int
 _MAP_REMOVE_ALL (void *data, void *res, int *remove)

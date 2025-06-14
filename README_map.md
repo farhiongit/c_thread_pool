@@ -35,7 +35,10 @@ The map stores pointers to allocated data:
 	  void *data;
 	
 ### Key
-The type of the user-defined function that should return a pointer to the the part of `data` that contains the key of the map.
+The key of the map is extracted from the data stored in it (generally but not necessarily a subset of it). A user-defined function of type `map_key_extractor` (passed to `map_create`) can be used to extract this subset.
+
+
+`map_key_extractor` is the type of the user-defined function that should return a pointer to the the part of `data` that contains the key of the map.
 
 
 
@@ -43,20 +46,23 @@ The type of the user-defined function that should return a pointer to the the pa
 | - |
 | const void \*(\*map\_key\_extractor) (void \*data) |
 
-Functions of type `map_key_extractor` should not allocate memory dynamically though.
+> Functions of type `map_key_extractor` should not allocate memory dynamically.
 
 
 Example:
 
-	  struct entry
+	  enum class { NOUN, VERB, ADJECTIVE, ADVERB, PRONOUN, DETERMINER, PREPOSITION, CONJUNCTION, INTERJECTION };
+	  enum gender { MASCULINE, FEMININE, NEUTER };
+	  struct entry  // The type of the data stored in the map
 	  {
-	    char* word;
+	    struct word { char *spelling ; enum class class ; } word;
+	    enum gender gender ;
 	    char* definition;
-	  }
+	  };
 
-	  const void* get_word (void* data)
+	  static const void* get_word (void* data)       // 'data' is supposed to be a pointer to 'struct entry'
 	  {
-	    return ((struct entry *)data)->word;
+	    return &((struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
 	  }
 
 
@@ -76,6 +82,21 @@ A comparison function must return an integer less than, equal to, or greater tha
 
 
 The third argument `arg` receives the pointer that was passed to `map_create`.
+
+
+Example:
+
+	  static int
+	  cmp_word (const void *p1, const void *p2, void *arg)
+	  {
+	    (void) arg;
+	    const struct word *w1 = p1;
+	    const struct word *w2 = p2;
+	    int ret = strcoll (w1->spelling, w2->spelling);
+	    if (!ret)
+	      ret = w1->class > w2->class ? 1 : w1->class < w2->class ? -1 : 0;
+	    return ret;
+	  }
 
 
 ### Selector on elements of the map
@@ -126,60 +147,6 @@ The `map_operator` should return `1` if the operator should be applied on furthe
 In other words, as soon as the operator returns `0`, it stops `map_traverse`, `map_traverse_backward` or `map_find_key`.
 
 
-#### Helper map operator to retrieve and remove one element
-This map operator simply retrieves and removes one element from the map.
-
-
-```c
-extern map_operator MAP_REMOVE;
-```
-> Its use is **not recommended** though. Actions on an element should better be directly integrated in the `map_operator` function.
-
-
-The helper operator `MAP_REMOVE` removes and retrieves an element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
-and, if the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a non null pointer,
-it sets the pointer `context` to the data of this element.
-
-
-`context` **should be** `0` or the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
-
-
-Example
-
-If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
-
-	  T *data = 0;  // `data` is a *pointer* to the type stored in the map.
-	  if (map_traverse (m, MAP_REMOVE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
-	  {
-	    // `data` can thread-safely be used to work with.
-	    ...
-	    // If needed, it can be reinserted in the map after use.
-	    map_insert_data (m, data);
-	  }
-	
-#### Helper map operator to remove all elements
-This map operator removes all the element from the map.
-
-
-```c
-extern map_operator MAP_REMOVE_ALL;
-```
-the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` should be `0` or a pointer to a destructor function with signature void (*)(void * ptr).
-
-
-This destructor is applied to each element of the map.
-
-
-#### Helper map operator to move elements from one map to another
-This map operator moves an element of the map to another **different** map passed in the argument `context` of `map_find_key`, `map_traverse` or `map_traverse_backward`.
-
-
-N.B.: A destination map identical to the source map would **deadly lock** the calling thread.
-
-
-```c
-extern map_operator MAP_MOVE_TO;
-```
 ## Interface
 ### Create a map
 ```c
@@ -195,16 +162,16 @@ If not `0`, the comparison function `cmp_key` must return an integer less than, 
 if the first argument is considered to be respectively less than, equal to, or greater than the second.
 
 
-`cmp_key` is applied on `get_key (data)`.
+`cmp_key` is applied on `get_key (data)` if `get_key` is not `0` ; otherwise, `cmp_key` is applied on `data` (where `data` is a pointer inserted by `map_insert_data`).
 
 
-`get_key` and `cmp_key` should be either both non-null or both null.
+`cmp_key` must be set if `get_key` is set.
 
 
 The pointer `arg` (which can be `0`) is passed to the comparison function `cmp_key` (as third argument).
 
 
-`property` is one of the values below and dictates the behavior in case two data with equal key are inserted.
+`property` is one of the values below and dictates the behaviour in case two data with equal key are inserted.
 
 
 `property` is `MAP_NONE` (or `0`), `MAP_UNIQUENESS` or `MAP_STABLE`.
@@ -213,16 +180,16 @@ The pointer `arg` (which can be `0`) is passed to the comparison function `cmp_k
 Elements are unique in the map if and only if `property` is equal to `MAP_UNIQUENESS`.
 
 
-Equal elements are ordered in the order they were inserted if and only if `property` is equal to `MAP_STABLE`.
+Equal elements are ordered in the order they were inserted if `property` is equal to `MAP_STABLE`.
 
 
-The second data is not inserted.
+The second data is not inserted (uniqueness).
 
 
 ```c
 extern int MAP_UNIQUENESS;      
 ```
-The second data is inserted **after** the first data with the identical key.
+The second data is inserted **after** the first data with the identical key (stability).
 
 
 ```c
@@ -234,23 +201,17 @@ The second data is inserted either (randomly) before or after the first data wit
 ```c
 extern int MAP_NONE;            
 ```
-Helper function to be used as a key extractor for sets and ordered lists (see below).
+7 possible uses, depending on `property`, `cmp_key` and `get_key`:
 
-
-```c
-extern map_key_extractor MAP_KEY_IS_DATA;       
-```
-7 possible uses, depending on `property` and `get_key`:
-
-| Use            | `property`           | `get_key`         | Comment                                                                                                                    |
-| -              | -                    | -                 | -                                                                                                                          |
-| Ordered map    | `MAP_UNIQUENESS`     | Non-zero          | Each key is unique in the map. `get_key` and `cmp_key` must be set.                                                        |
-| Dictionary     | not `MAP_UNIQUENESS` | Non-zero          | Keys can have multiple entries in the map. `get_key` and `cmp_key` must be set.                                            |
-| Set            | `MAP_UNIQUENESS`     | `MAP_KEY_IS_DATA` | Elements are unique. `cmp_key` must be set.                                                                                |
-| Ordered list   | `MAP_STABLE`         | `MAP_KEY_IS_DATA` | Equal elements are ordered in the order they were inserted. `cmp_key` must be set.                                         |
-| Unordered list | `MAP_NONE`           | `0`               | `cmp_key` must be `0` as well.                                                                                             |
-| FIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse (m, MAP_REMOVE, 0, &data)` to remove an element.           |
-| LIFO           | `MAP_STABLE`         | `0`               | Elements are appended after the last element. Use `map_traverse_backward (m, MAP_REMOVE, 0, &data)` to remove an element.  |
+| Use            | `property`           | `cmp_key` | `get_key` | Comment                                                                                                                       |
+| -              | -                    | -         | -         | -                                                                                                                             |
+| Ordered map    | `MAP_UNIQUENESS`     | Non-zero  | Non-zero  | Each key is unique in the map.                                                                                                |
+| Dictionary     | not `MAP_UNIQUENESS` | Non-zero  | Non-zero  | Keys can have multiple entries in the map.                                                                                    |
+| Set            | `MAP_UNIQUENESS`     | Non-zero  | `0`       | Elements are unique. `cmp_key` applies to inserted `data` (the `data` is the key).                                            |
+| Ordered list   | `MAP_STABLE`         | Non-zero  | `0`       | Equal elements are ordered in the order they were inserted. `cmp_key` applies to inserted `data` (the `data` is the key).     |
+| Unordered list | not `MAP_UNIQUENESS` | `0`       | `0`       |                                                                                                                               |
+| FIFO           | `MAP_STABLE`         | `0`       | `0`       | Elements are appended after the last element. Use `map_traverse (m, MAP_REMOVE_ONE, 0, &data)` to remove an element.          |
+| LIFO           | `MAP_STABLE`         | `0`       | `0`       | Elements are appended after the last element. Use `map_traverse_backward (m, MAP_REMOVE_ONE, 0, &data)` to remove an element. |
 
 > (*) If `cmp_key` or `get_key` is `0` and property is `MAP_STABLE`, complexity is reduced by a factor log n.
 
@@ -294,17 +255,20 @@ Complexity : log n (see (*) above). MT-safe. Non-recursive.
 
 
 ### Retrieve and remove elements from a map
-> `map_find_key`, `map_traverse`, `map_traverse_backward` and `map_insert_data` can call each other (the map should be passed in the `context` argument though).
-
-
 #### Find an element from its key
 ```c
-size_t map_find_key (struct map *l, const void *key, map_operator op, void *context);
+size_t map_find_key (struct map *map, const void *key, map_operator op, void *context);
 ```
-If `get_key` and `cmp_key` are not null, applies `operator` on the data of the elements in the map that matches the key (for which `cmp_key` returns `0`), as long as `op` returns non-zero.
+If `get_key` is not null, applies `op` on the data of the elements in the map that matches the key (for which `cmp_key (get_key (data))` returns `0`), as long as `op` returns non-zero.
 
 
-Elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while finding elements.
+If `get_key` is null, applies `operator` on the data of the elements in the map that matches the data (for which `cmp_key (data)` returns `0`), as long as `op` returns non-zero.
+
+
+If `op` is null, all the matching elements are found (and counted).
+
+
+> `cmp_key` should have been previously set by `map_create`.
 
 
 `context` is passed as the second argument of operator `op`.
@@ -313,41 +277,127 @@ Elements can be removed from (when `*remove` is set to `1` in `op`) or inserted 
 Returns the number of elements on which the operator `op` has been applied.
 
 
+> If `op` is null, `map_find_key` simply counts and returns the number of matching elements with the `key`.
+
+
 Complexity : log n (see (*)). MT-safe. Non-recursive.
+
+
+> `map_find_key`, `map_traverse`, `map_traverse_backward` and `map_insert_data` can call each other *in the same thread* (the first argument `map` can be passed again through the `context` argument).
+
+
+> Therefore, elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while finding elements.
 
 
 #### Traverse a map
 ```c
-size_t map_traverse (map *, map_operator op, map_selector sel, void *context);
+size_t map_traverse (map *map, map_operator op, map_selector sel, void *context);
 ```
 ```c
-size_t map_traverse_backward (map *, map_operator op, map_selector sel, void *context);
+size_t map_traverse_backward (map *map, map_operator op, map_selector sel, void *context);
 ```
-Applies the operator `op` on all the data stored in the map as long as the operator `op` returns non-zero, from the first element to the last (resp. the other way round).
+Traverse the elements of the map.
 
 
-Elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while traversing elements.
+If the operator `op` is not null, it is applied on the data stored in the map, from the first element to the last (resp. the other way round), as long as the operator `op` returns non-zero.
 
 
-Insertion while traversing should be done with care since an infinite loop will occur if, in `op`, an element is removed and :
-
-  - while traversing forward, at least an equal or greater element is inserted ;
-  - while traversing backward, at least a lower element is inserted.
+If `op` is null, all the elements are traversed.
 
 
-
-If `sel` is not null, `op` is applied only to `data` for which the selector `sel` returns non-zero. `map_traverse` (resp.`map_traverse_backward`) then behaves as if the operator `op` would start with: `if (!sel (data, context)) return 1;`.
+If the selector `sel` is not null, elements for which `sel (data)` (where `data` is an element previously inserted into the map) returns `0` are ignored. `map_traverse` (resp.`map_traverse_backward`) behaves as if the operator `op` would start with: `if (!sel (data, context)) return 1;`.
 
 
 `context` is passed as the second argument of operator `op` and selector `sel`.
 
 
-Returns the number of elements of the map on which the operator `op` has been applied.
+Returns the number of elements of the map that match `sel` (if set) and on which the operator `op` (if set) has been applied.
+
+
+> If `op` is null, `map_traverse` and `map_traverse_backward` simply count and return the number of matching elements with the selector `sel` (if set).
+
+
+> If `op` and `sel `are null, `map_traverse` and `map_traverse_backward` simply count and return the number of elements.
 
 
 Complexity : n * log n (see (*)). MT-safe. Non-recursive.
 
 
+> `map_find_key`, `map_traverse`, `map_traverse_backward` and `map_insert_data` can call each other *in the same thread* (the first argument `map` can be passed again through the `context` argument).
+
+
+> Therefore, elements can be removed from (when `*remove` is set to `1` in `op`) or inserted into (when `map_insert_data` is called in `op`) the map *by the same thread* while traversing elements.
+
+
+> Insertion while traversing should be done with care since an infinite loop will occur if, in `op`, an element is removed and :
+>
+>  - while traversing forward, at least an equal or greater element is inserted ;
+>  - while traversing backward, at least a lower element is inserted.
+
+
+### Predefined operators for use with `map_find_key`, `map_traverse` and `map_traverse_backward`.
+
+
+`map_operator` functions passed to `map_find_key`, `map_traverse` and `map_traverse_backward` should be user-defined.
+
+
+But useful operators are provided below.
+
+
+#### Map operator to retrieve and remove one element
+This map operator simply retrieves and removes one element from the map.
+
+
+```c
+extern map_operator MAP_REMOVE_ONE;
+```
+> Its use is **not recommended** though. Actions on an element should better be directly integrated in the `map_operator` function.
+
+
+The helper operator `MAP_REMOVE_ONE` removes and retrieves an element found by `map_find_key`, `map_traverse` or `map_traverse_backward`
+and, if the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` is a non null pointer,
+it sets the pointer `context` to the data of this element.
+
+
+`context` **should be** `0` or the address of a pointer to type T, where `context` is the argument passed to `map_find_key`, `map_traverse` or `map_traverse_backward`.
+
+
+Example
+
+If `m` is a map of elements of type T and `sel` a map_selector, the following piece of code will remove and retrieve the data of the first element selected by `sel`:
+
+	  T *data = 0;  // `data` is a *pointer* to the type stored in the map.
+	  if (map_traverse (m, MAP_REMOVE_ONE, sel, &data) && data)  // A *pointer to the pointer* `data` is passed to map_traverse.
+	  {
+	    // `data` can thread-safely be used to work with.
+	    ...
+	    // If needed, it can be reinserted in the map after use.
+	    map_insert_data (m, data);
+	  }
+	
+#### Map operator to remove all elements
+This map operator removes all the element from the map.
+
+
+```c
+extern map_operator MAP_REMOVE_ALL;
+```
+the parameter `context` of `map_find_key`, `map_traverse` or `map_traverse_backward` should be `0` or a pointer to a destructor function with signature `void (*)(void * ptr)` (such as `free`).
+
+
+This destructor is applied to each element selected by `map_find_key`, `map_traverse` or `map_traverse_backward`.
+
+
+#### Map operator to move elements from one map to another
+This map operator moves each element selected by `map_find_key`, `map_traverse` or `map_traverse_backward` to another **different** map passed in the argument `context` of `map_find_key`, `map_traverse` or `map_traverse_backward`.
+
+
+N.B.: A destination map identical to the source map would **deadly lock** the calling thread.
+
+
+```c
+extern map_operator MAP_MOVE_TO;
+```
 
 -----
 *This page was generated automatically from `map.h` by `h2md`.*
