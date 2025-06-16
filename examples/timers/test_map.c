@@ -45,89 +45,9 @@ select_c (const void *data, void *res)
   return (*(const char *) data == 'c');
 }
 
-static int
-cmpip (const void *p1, const void *p2, void *arg)
+static void
+test1 (void)
 {
-  (void) arg;
-  return *(const int*)p1 < *(const int*)p2 ? -1 : *(const int*)p1 > *(const int*)p2 ? 1 : 0; 
-}
-
-static int nop (int i) { return i ; }
-static int dbl (int i) { return 2 * i ; }
-static int dec (int i) { return i - 1 ; }
-
-static int
-apply (void *data, void *res, int *remove)
-{
-  (void) remove;
-  int (*f) (int) = res;
-  *(int *)data = f (*(int *)data);
-  return 1;                     // Tells: continue traversing.
-}
-
-struct rai_args { int (*f) (int) ; map *map ; };
-
-static int
-remove_apply_insert (void *data, void *res, int *remove)
-{
-  int (*f) (int) = ((struct rai_args *)res)->f;
-  map *m = ((struct rai_args *)res)->map;
-  int *pi = malloc (sizeof (*pi));
-  *pi = f (*(int *)data);
-  map_insert_data (m, pi);
-  free (data);
-  *remove = 1;                  // Tells: remove the data from the map.
-  return 1;                     // Tells: continue traversing.
-}
-
-static int
-print_pi (void *data, void *res, int *remove)
-{
-  (void) res;
-  fprintf (stdout, "%i ", *(int *) data);
-  *remove = 0;                  // Tells: do not remove the data from the map.
-  return 1;                     // Tells: continue traversing.
-}
-
-enum class { NOUN, VERB, ADJECTIVE, ADVERB, PRONOUN, DETERMINER, PREPOSITION, CONJUNCTION, INTERJECTION };
-enum gender { MASCULINE, FEMININE, NEUTER, NONE };
-struct entry  // The type of the data stored in the map
-{
-  struct word { char *spelling ; enum class class ; } word;
-  enum gender gender ;
-  char* definition;
-};
-
-static const void*
-get_word (const void* data)       // 'data' is supposed to be a pointer to 'struct entry'
-{
-  return &((const struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
-}
-
-static int
-cmp_word (const void *p1, const void *p2, void *arg)
-{
-  (void) arg;
-  const struct word *w1 = p1;
-  const struct word *w2 = p2;
-  int ret = strcoll (w1->spelling, w2->spelling);
-  if (!ret)
-    ret = w1->class > w2->class ? 1 : w1->class < w2->class ? -1 : 0;
-  return ret;
-}
-
-static int
-sel_noun_masculine (const void *data, void *context)
-{
-  (void) context;
-  const struct entry *e = data;
-  return e->word.class == NOUN && e->gender == MASCULINE;
-}
-
-int
-main (void)
-{
-  srand ((unsigned int) time (0));
   for (int i = 1; i <= 4; i++)
   {
     map *li;
@@ -222,7 +142,55 @@ main (void)
     map_destroy (li);
     fprintf (stdout, "=======\n");
   }
+}
 
+static int
+cmpip (const void *p1, const void *p2, void *arg)
+{
+  (void) arg;
+  return *(const int*)p1 < *(const int*)p2 ? -1 : *(const int*)p1 > *(const int*)p2 ? 1 : 0;
+}
+
+static int nop (int i) { return i ; }
+static int dbl (int i) { return 2 * i ; }
+static int dec (int i) { return i - 1 ; }
+
+static int
+apply (void *data, void *res, int *remove)
+{
+  (void) remove;
+  int (*f) (int) = res;
+  *(int *)data = f (*(int *)data);
+  return 1;                     // Tells: continue traversing.
+}
+
+struct rai_args { int (*f) (int) ; map *map ; };
+
+static int
+remove_apply_insert (void *data, void *res, int *remove)
+{
+  int (*f) (int) = ((struct rai_args *)res)->f;
+  map *m = ((struct rai_args *)res)->map;
+  int *pi = malloc (sizeof (*pi));
+  *pi = f (*(int *)data);
+  map_insert_data (m, pi);
+  free (data);
+  *remove = 1;                  // Tells: remove the data from the map.
+  return 1;                     // Tells: continue traversing.
+}
+
+static int
+print_pi (void *data, void *res, int *remove)
+{
+  (void) res;
+  fprintf (stdout, "%i ", *(int *) data);
+  *remove = 0;                  // Tells: do not remove the data from the map.
+  return 1;                     // Tells: continue traversing.
+}
+
+static void
+test2 (void)
+{
   puts ("============================================================");
   map* li = map_create (0, cmpip, 0, MAP_STABLE);   // Ordered list
   for (size_t i = 0 ; i < 10 ; i++)
@@ -256,7 +224,46 @@ main (void)
   map_traverse (li, print_pi, 0, 0);
   fprintf (stdout, "\n");
   map_destroy (li);
+}
 
+enum class { NOUN, VERB, ADJECTIVE, ADVERB, PRONOUN, DETERMINER, PREPOSITION, CONJUNCTION, INTERJECTION };
+enum gender { MASCULINE, FEMININE, NEUTER, NONE };
+struct entry  // The type of the data stored in the map
+{
+  struct word { char *spelling ; enum class class ; } word;
+  enum gender gender ;
+  char* definition;
+};
+
+static const void*
+get_word (const void* data)       // 'data' is supposed to be a pointer to 'struct entry'
+{
+  return &((const struct entry *)data)->word;  // 'word' is declared as the subset of the 'data' that defines the key of the map.
+}
+
+static int
+cmp_word (const void *p1, const void *p2, void *arg)
+{
+  (void) arg;
+  const struct word *w1 = p1;
+  const struct word *w2 = p2;
+  int ret = strcoll (w1->spelling, w2->spelling);
+  if (!ret)
+    ret = w1->class > w2->class ? 1 : w1->class < w2->class ? -1 : 0;
+  return ret;
+}
+
+static int
+sel_noun_masculine (const void *data, void *context)
+{
+  (void) context;
+  const struct entry *e = data;
+  return e->word.class == NOUN && e->gender == MASCULINE;
+}
+
+static void
+test3 (void)
+{
   puts ("============================================================");
   map* dictionary = map_create (get_word, cmp_word, 0, MAP_STABLE);   // Dictionary. A word can have several definitions and therefore appear several times in the map.
   map_insert_data (dictionary, &(struct entry){{"Orange", NOUN}, FEMININE, "Fruit"});
@@ -271,4 +278,13 @@ main (void)
   fprintf (stdout, "%lu element(s) found.\n", map_find_key (dictionary, &(struct word){"Orange", VERB}, 0, 0));
   map_traverse (dictionary, MAP_REMOVE_ALL, 0, 0);
   map_destroy (dictionary);
+}
+
+int
+main (void)
+{
+  srand ((unsigned int) time (0));
+  test1 ();
+  test2 ();
+  test3 ();
 }

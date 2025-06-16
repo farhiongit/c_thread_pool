@@ -103,4 +103,8 @@ will yield:
 	
 
 -----
+
 *This page was generated automatically from `trace.h` by `h2md`.*
+
+-----
+

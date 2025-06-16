@@ -50,7 +50,7 @@ test_map: libs examples/timers/test_map
 	@echo "*********************"
 
 examples/qsip/qsip_wc_test: LDFLAGS+=-L.
-examples/qsip/qsip_wc_test: LDLIBS=-lwqm -ltimer -lmap -lm
+examples/qsip/qsip_wc_test: LDLIBS=-lwqm -ltimer -lmap
 examples/qsip/qsip_wc_test: examples/qsip/qsip_wc_test.o examples/qsip/qsip_wc.o
 
 #examples/qsip/qsip_wc_test.o: CPPFLAGS+=-DSIZE=100 -DTIMES=10    # for valgrind or gdb
@@ -64,19 +64,19 @@ examples/fuzzyword/fuzzyword: CFLAGS+=-std=c23
 examples/fuzzyword/fuzzyword: CPPFLAGS+=-DCOLLATE
 examples/fuzzyword/fuzzyword: CPPFLAGS+=-I.
 examples/fuzzyword/fuzzyword: LDFLAGS+=-L.
-examples/fuzzyword/fuzzyword: LDLIBS=-lwqm -ltimer -lmap -lm
+examples/fuzzyword/fuzzyword: LDLIBS=-lwqm -ltimer -lmap
 examples/fuzzyword/fuzzyword: examples/fuzzyword/fuzzyword.c
 
 examples/intensive/intensive: CFLAGS+=-std=c23
 examples/intensive/intensive: CPPFLAGS+=-I.
 examples/intensive/intensive: LDFLAGS+=-L.
-examples/intensive/intensive: LDLIBS=-lwqm -ltimer -lmap -lm
+examples/intensive/intensive: LDLIBS=-lwqm -ltimer -lmap
 examples/intensive/intensive: examples/intensive/intensive.c
 
 examples/timers/timers: CFLAGS+=-std=c23
 examples/timers/timers: CPPFLAGS+=-I.
 examples/timers/timers: LDFLAGS+=-L.
-examples/timers/timers: LDLIBS=-lwqm -ltimer -lmap -lm -lrt
+examples/timers/timers: LDLIBS=-lwqm -ltimer -lmap -lrt
 examples/timers/timers: examples/timers/timers.c
 
 examples/timers/test_map: CFLAGS+=-std=c23

@@ -400,4 +400,8 @@ extern map_operator MAP_MOVE_TO;
 ```
 
 -----
+
 *This page was generated automatically from `map.h` by `h2md`.*
+
+-----
+

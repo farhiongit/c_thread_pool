@@ -11,7 +11,7 @@
 struct timer_elem
 {
   struct timespec timeout;
-  int (*callback) (void *arg);
+  void (*callback) (void *arg);
   void *arg;
 };
 
@@ -54,7 +54,7 @@ Timers_get_earliest (void *data, void *res, int *remove)
 }
 
 static void *
-Timers_add (struct timespec timeout, int (*callback) (void *arg), void *arg)
+Timers_add (struct timespec timeout, void (*callback) (void *arg), void *arg)
 {
   struct timer_elem *new = calloc (1, sizeof (*new));
   if (!new)
@@ -116,8 +116,8 @@ timers_init (void)              // Called once.
 struct timespec
 delay_to_abs_timespec (double seconds)
 {
-  long sec = lround (trunc (seconds));  // C standard function.
-  long nsec = lround ((seconds - trunc (seconds)) * 1000 * 1000 * 1000);
+  long sec = (long) (seconds);
+  long nsec = (long) (seconds * 1000 * 1000 * 1000) - (sec * 1000 * 1000 * 1000);
   struct timespec t;
   timespec_get (&t, TIME_UTC);  // C standard function, returns now. UTC since cnd_timedwait is UTC-based.
   t.tv_sec += sec + (t.tv_nsec + nsec) / (1000 * 1000 * 1000);
@@ -126,7 +126,7 @@ delay_to_abs_timespec (double seconds)
 }
 
 void *
-timer_set (struct timespec timeout, int (*callback) (void *arg), void *arg)
+timer_set (struct timespec timeout, void (*callback) (void *arg), void *arg)
 {
   call_once (&TIMERS_INIT, timers_init);
   void *timer = Timers_add (timeout, callback, arg);

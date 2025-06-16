@@ -64,12 +64,11 @@ sigev_handler (union sigval sig)
   assert (threadpool_task_continue (*(uint64_t *) sig.sival_ptr) == EXIT_SUCCESS || errno == ETIMEDOUT);
 }
 #elifdef USERTIMER              // User-defined thread timer (see below).
-static int
+static void
 timer_handler (void *arg)
 {
   errno = 0;
   assert (threadpool_task_continue (*(uint64_t *) arg) == EXIT_SUCCESS || errno == ETIMEDOUT);  // Trigger continuation.
-  return EXIT_SUCCESS;
 }
 #endif
 

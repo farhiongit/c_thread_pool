@@ -115,4 +115,8 @@ while IFS= read -r newline ; do  # Read standard input stream
 done < "$1"
 echo
 echo -----
+echo
 echo -e "*This page was generated automatically from \`${1##*/}\` by \`${0##*/}\`.*"
+echo
+echo -----
+echo

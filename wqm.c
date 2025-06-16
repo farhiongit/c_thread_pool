@@ -155,12 +155,11 @@ threadpool_task_continuator_timeout_operator (void *data, void *res, int *remove
   return 0;
 }
 
-static int
+static void
 threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler
 {
   map_find_key (Continuators.map, p_uid, threadpool_task_continuator_timeout_operator, 0);
   free (p_uid);
-  return EXIT_SUCCESS;
 }
 
 static size_t threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job),
