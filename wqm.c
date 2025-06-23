@@ -119,7 +119,7 @@ struct continuator_data
 };
 
 static const void *
-continuator_data_get_key (const void *pa)
+continuator_data_get_key (void *pa)
 {
   const struct continuator_data *a = pa;
   return &a->uid;
@@ -357,7 +357,7 @@ threadpool_monitor_every_100ms (struct threadpool_monitor d)
 static void
 threadpool_init (void)          // Called once.
 {
-  Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, MAP_UNIQUENESS);        // Won't be destroyed.
+  Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1);        // Won't be destroyed.
 }
 
 struct threadpool *
