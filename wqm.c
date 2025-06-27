@@ -114,9 +114,18 @@ struct continuator_data
   struct job job;
   int (*work) (struct threadpool * threadpool, void *data);
   uint64_t uid;
+  uint64_t *p_uid;
   void *timeout_timer;
   struct threadpool *threadpool;
 };
+
+static void
+continuator_data_clear_on_exit (void * data)
+{
+  struct continuator_data *c = data;
+  free (c->p_uid);
+  free (c);
+}
 
 static const void *
 continuator_data_get_key (void *pa)
@@ -182,6 +191,7 @@ threadpool_task_continuator_continue_operator (void *data, void *res, int *remov
   // Broadcast (but not before the continuator has been converted into a task).
   //timer_unset (continuator->timeout_timer);     // Too slow
   thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
+  // continuator->p_uid is NOT free'd.
   free (continuator);           // Remove the continuator.
   *remove = 1;                  // Remove the continuator from the map.
   return 0;
@@ -235,6 +245,7 @@ threadpool_task_continuation (int (*work) (struct threadpool *threadpool, void *
   }
   while (!map_insert_data (Continuators.map, continuator));     // continuator is inserted in the map.
   uint64_t *p_uid = malloc (sizeof (*p_uid));
+  continuator->p_uid = p_uid;
   *p_uid = continuator->uid;    // p_uid will not fade out and will survive the continuator.
   // p_uid will be passed to the timer handler threadpool_task_continuation_timeout_handler where it will be free'd.
   continuator->timeout_timer = timer_set (abs_timeout, threadpool_task_continuation_timeout_handler, p_uid);
@@ -355,9 +366,17 @@ threadpool_monitor_every_100ms (struct threadpool_monitor d)
 
 // ================= Worker crew =================
 static void
+threadpool_clear_on_exit (void)
+{
+  map_traverse (Continuators.map, MAP_REMOVE_ALL, 0, continuator_data_clear_on_exit);
+  map_destroy (Continuators.map);
+}
+
+static void
 threadpool_init (void)          // Called once.
 {
-  Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1);        // Won't be destroyed.
+  Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1);
+  atexit (threadpool_clear_on_exit);
 }
 
 struct threadpool *

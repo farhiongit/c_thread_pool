@@ -574,11 +574,11 @@ Run it with:
 $ make intensive
 ```
 
-### Timers (virtual tasks)
+### Continuations (virtual tasks)
 
-This [example](examples/timers) uses `threadpool_task_continuation` and `threadpool_task_continue` to create asynchronous virtual tasks.
+This [example](examples/continuations) uses `threadpool_task_continuation` and `threadpool_task_continue` to create asynchronous virtual tasks.
 
-Asynchronous tasks (a pause of one second) can be processed with a thread pool of one worker only: those tasks behave like virtual tasks which do not block the worker (awesome !)
+Asynchronous tasks (here a pause of one second) can be processed with a thread pool of one worker only: those tasks behave like virtual tasks which do not block the worker (awesome !)
 
 Run it with:
 
@@ -592,6 +592,8 @@ The API is implemented in C11 (file `wqm.c`) using the standard C thread library
 It is highly inspired from the great book "Programming with POSIX Threads" written by David R. Butenhof, 21st ed., 2008, Addison Wesley.
 
 It has been heavily tested, but bugs are still possible. Please don't hesitate to report them to me.
+
+It makes use of `libmap` and `libtimer` implemented in [minimaps](https://github.com/farhiongit/minimaps).
 
 ### Management of workers
 

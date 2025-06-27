@@ -1,27 +1,26 @@
-CFLAGS=
 CFLAGS+=-O
 #CFLAGS+=-g
 #CFLAGS+=-pg
 CFLAGS+=-fPIC
 LDFLAGS=
 #LDFLAGS+=-pg
-#VALGRIND=valgrind --leak-check=full
+VALGRIND=valgrind --leak-check=full --show-leak-kinds=all
 
 .PHONY: all
 all: run_examples
 
 .PHONY: help
 help:
-	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, callgraph, cloc or <language>/LC_MESSAGES/libwqm.mo"
+	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, cloc or <language>/LC_MESSAGES/libwqm.mo"
 
 #### Examples
 .PHONY: run_examples
-run_examples: qsip_wc_test fuzzyword intensive
+run_examples: qsip_wc_test fuzzyword intensive timers
 
 .PHONY: qsip_wc_test
 qsip_wc_test: libs examples/qsip/qsip_wc_test
 	@echo "********* $@ ************"
-	cd examples/qsip ; LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../..:../../../minimaps $(VALGRIND) ./qsip_wc_test
+	cd examples/qsip ; LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../..:../../../minimaps ./qsip_wc_test
 	@echo "*********************"
 
 .PHONY: fuzzyword
@@ -35,6 +34,12 @@ fuzzyword: libs examples/fuzzyword/fuzzyword
 intensive: libs examples/intensive/intensive
 	@echo "********* $@ ************"
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps ./examples/intensive/intensive
+	@echo "*********************"
+
+.PHONY: timers
+timers: libs examples/continuations/timers
+	@echo "********* $@ ************"
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(VALGRIND) ./examples/continuations/timers
 	@echo "*********************"
 
 examples/qsip/qsip_wc_test: LDFLAGS+=-L. -L../minimaps
@@ -62,6 +67,12 @@ examples/intensive/intensive: CPPFLAGS+=-I. -I../minimaps
 examples/intensive/intensive: LDFLAGS+=-L. -L../minimaps
 examples/intensive/intensive: LDLIBS=-lwqm -ltimer -lmap
 examples/intensive/intensive: examples/intensive/intensive.c
+
+examples/continuations/timers: CFLAGS+=-std=c23
+examples/continuations/timers: CPPFLAGS+=-I. -I../minimaps
+examples/continuations/timers: LDFLAGS+=-L. -L../minimaps
+examples/continuations/timers: LDLIBS=-lwqm -ltimer -lmap
+examples/continuations/timers: examples/continuations/timers.c
 
 #### Tools
 .PHONY: callgraph
