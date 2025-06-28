@@ -120,7 +120,7 @@ struct continuator_data
 };
 
 static void
-continuator_data_clear_on_exit (void * data)
+continuator_data_clear_on_exit (void *data)
 {
   struct continuator_data *c = data;
   free (c->p_uid);
