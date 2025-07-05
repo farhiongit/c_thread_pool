@@ -265,7 +265,7 @@ threadpool_monitor_exec (struct threadpool *monitor, void *data)
 }
 
 static void
-threadpool_monitor_call (struct threadpool *threadpool)
+threadpool_monitor_call (struct threadpool *threadpool, int force)
 {
   if (threadpool->monitor.displayer && threadpool->monitor.processor)
   {
@@ -287,7 +287,9 @@ threadpool_monitor_call (struct threadpool *threadpool)
     t.tv_sec -= threadpool->monitor.t0.tv_sec;
     t.tv_nsec -= threadpool->monitor.t0.tv_nsec;
     v.time = (double) t.tv_sec + (double) t.tv_nsec / 1e9;
-    if (threadpool->monitor.filter && !threadpool->monitor.filter (v))
+    if (!threadpool->monitor.filter)
+      force = 0;
+    if (!force && threadpool->monitor.filter && !threadpool->monitor.filter (v))
       return;
     struct threadpool_monitor *p = malloc (sizeof (*p));
     if (p)
@@ -299,6 +301,13 @@ threadpool_monitor_call (struct threadpool *threadpool)
 }
 
 void
+threadpool_monitor (struct threadpool *threadpool)
+{
+  if (!threadpool->monitor.filter)
+    threadpool_monitor_call (threadpool, 1);
+}
+
+void
 threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handler new, void *a, int (*filter) (struct threadpool_monitor d))
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
@@ -307,7 +316,7 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
   threadpool->monitor.filter = filter;
   if (new && !threadpool->monitor.processor)
     threadpool->monitor.processor = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, &threadpool->monitor.last_time, TP_RUN_ALL_TASKS);
-  threadpool_monitor_call (threadpool);
+  threadpool_monitor_call (threadpool, 0);
   thrd_honored (mtx_unlock (&threadpool->mutex));
 }
 
@@ -446,7 +455,7 @@ thread_worker_runner (void *args)
     threadpool->nb_idle_workers++;
     while (!threadpool_something_to_process_predicate (threadpool) && !threadpool_is_done_predicate (threadpool))       // Predicate is not fulfilled: wait in idle state.
     {
-      threadpool_monitor_call (threadpool);
+      threadpool_monitor_call (threadpool, 0);
       int cnd;
       if (threadpool->nb_async_tasks)
         thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));       // Wait for continuators to be processed (threadpool_task_continue) or to timeout (threadpool_task_continuation_timeout_handler).
@@ -467,7 +476,7 @@ thread_worker_runner (void *args)
       {
         assert (threadpool->nb_pending_tasks--);
         threadpool->nb_processing_tasks++;      // The extracted data has to be processed somewhere.
-        threadpool_monitor_call (threadpool);   // Processing worker
+        threadpool_monitor_call (threadpool, 0);        // Processing worker
         Worker_context.current_task = &old_elem->task;
         thrd_honored (mtx_unlock (&threadpool->mutex)); // Unlock
         int ret = old_elem->task.work (threadpool, old_elem->task.job.data);    //<<<<<<<<<< work <<<<<<<<<<< (N.B.: work could itself add tasks by calling 'threadpool_add_task').
@@ -485,7 +494,7 @@ thread_worker_runner (void *args)
         else
           threadpool->nb_succeeded_tasks++;
       }
-      threadpool_monitor_call (threadpool);
+      threadpool_monitor_call (threadpool, 0);
       if (!old_elem->task.to_be_continued && old_elem->task.job.data_delete)    // Call to task.job.data_delete is MT-safe (guarded by threadpool->mutex)
         old_elem->task.job.data_delete (old_elem->task.job.data);       // Note (*): get rid of job after use (and if it is not scheduled in a continuation).
       free (old_elem);
@@ -504,12 +513,12 @@ thread_worker_runner (void *args)
     {
       threadpool->active_worker_id[i] = 0;      // Unregister active worker.
       assert (threadpool->nb_alive_workers--);
-      threadpool_monitor_call (threadpool);
+      threadpool_monitor_call (threadpool, 0);
       if (threadpool->nb_alive_workers == 0 && threadpool->resource.deallocator)
       {
         threadpool->resource.deallocator (threadpool->resource.data);
         threadpool->resource.data = 0;
-        threadpool_monitor_call (threadpool);
+        threadpool_monitor_call (threadpool, 0);
       }
       if (threadpool_runoff_predicate (threadpool))     // The last worker is quitting:
         thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff)); //  signals it.
@@ -577,7 +586,7 @@ threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threa
         // let the thread pool know a new worker in on its way. This can not be deferred at the beginning of thread_worker_runner.
         if (threadpool->nb_alive_workers == 0 && threadpool->resource.allocator && !threadpool->resource.data)
         {
-          threadpool_monitor_call (threadpool);
+          threadpool_monitor_call (threadpool, 0);
           threadpool->resource.data = threadpool->resource.allocator (threadpool->global_data);
         }
         threadpool->nb_alive_workers++;
@@ -585,7 +594,7 @@ threadpool_create_task (struct threadpool *threadpool, int (*work) (struct threa
           threadpool->max_nb_workers = threadpool->nb_alive_workers;
         break;
       }
-  threadpool_monitor_call (threadpool);
+  threadpool_monitor_call (threadpool, 0);
   thrd_honored (mtx_unlock (&threadpool->mutex));
   return id;
 }
@@ -600,13 +609,14 @@ void
 threadpool_wait_and_destroy (struct threadpool *threadpool)
 {
   thrd_honored (mtx_lock (&threadpool->mutex));
+  threadpool_monitor_call (threadpool, 1);
   threadpool->concluding = 1;   // Declares that no more tasks will be added into the FIFO by the caller of 'threadpool_wait_and_destroy' (processing workers can still add tasks).
   // The predicate is modified to true (concluding set to 1):
   if (threadpool_is_done_predicate (threadpool))        // No running tasks (asynchronous or not)
     thrd_honored (cnd_broadcast (&threadpool->proceed_or_conclude_or_runoff));  // broadcast it to unblock and finish all pending threads.
   while (!threadpool_runoff_predicate (threadpool))     // Wait for all tasks (either virtual or not) to be processed and all running workers to terminate properly.
     thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));
-  threadpool_monitor_call (threadpool);
+  threadpool_monitor_call (threadpool, 1);
   if (threadpool->monitor.processor)
     threadpool_wait_and_destroy (threadpool->monitor.processor);        // Barrier to wait for all monitoring processes to finish.
   thrd_honored (mtx_unlock (&threadpool->mutex));
@@ -666,7 +676,7 @@ threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
     threadpool->nb_canceled_tasks += ret;
     assert (threadpool->nb_pending_tasks >= ret);
     threadpool->nb_pending_tasks -= ret;
-    threadpool_monitor_call (threadpool);
+    threadpool_monitor_call (threadpool, 0);
   }
   thrd_honored (mtx_unlock (&threadpool->mutex));
   return ret;

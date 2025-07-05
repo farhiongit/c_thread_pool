@@ -78,8 +78,6 @@ Those features are detailed below.
 
 #### Extra tools
 
-- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface (see [README](README_map.md)).
-- `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
 - `trace.h` permits to globally trace calls to a function without changing the code (see [README](README_trace.md)).
 - `h2md` is a script that converts header files with comments ([map.h](map.h) and [trace.h](trace.h)) into markdown files ([README_map.md](README_map.md) and [README_trace.md](README_trace.md)).
 
@@ -593,7 +591,10 @@ It is highly inspired from the great book "Programming with POSIX Threads" writt
 
 It has been heavily tested, but bugs are still possible. Please don't hesitate to report them to me.
 
-It makes use of `libmap` and `libtimer` implemented in [minimaps](https://github.com/farhiongit/minimaps).
+It makes use of `libmap` and `libtimer` implemented in [minimaps](https://github.com/farhiongit/minimaps) :
+
+- `map.h` and `map.c` define an unprecedented MT-safe implementation of a map library that can manage maps, sets, ordered and unordered lists that can do it all with a minimalist interface.
+- `timer.h` and `timer.c` define a OS-independent (as compared to POSIX `timer_settime`) timer.
 
 ### Management of workers
 

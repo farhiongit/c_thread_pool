@@ -11,7 +11,7 @@
 #include "timer.h"
 #include "wqm.h"
 
-static const size_t NB_TIMERS = 20000;
+static const size_t NB_TIMERS = 2000;
 static const double MAXDELAY = 2.;
 static const double TIMEOUT = 0.7 * MAXDELAY;   // Timeout (seconds) (shortened a little bit, for the purpose of the example.)
 static size_t Nb_timers_done = 0;
@@ -68,23 +68,39 @@ wait (struct threadpool * /* tp */ , void * /*arg */ )
 static void
 monitor_handler (struct threadpool_monitor d, void *)
 {
-  fprintf (stdout, "t=%6.2f s: %'zu workers. %'zu virtual tasks have already finished, %'zu virtual tasks have succeeded, %'zu are definitely out of time (over %'zu submitted).\n",
-           d.time, d.workers.nb_alive, Nb_timers_done, d.tasks.nb_succeeded, d.tasks.nb_failed, d.tasks.nb_submitted);
+  fprintf (stdout, "t=%6.2fs, %'zu active worker: %'zu processing virtual tasks, "
+           "%'zu virtual tasks have succeeded, %'zu will definitely be out of time (over %'zu submitted).\n",
+           d.time, d.workers.nb_alive, d.tasks.nb_asynchronous, d.tasks.nb_succeeded, d.tasks.nb_failed, d.tasks.nb_submitted);
+  fflush (stdout);
 }
 
 int
 main (void)
 {
-  fprintf (stdout, "Running %zu virtual tasks (asynchronous timers of at most %g seconds) on a single worker (timeout %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, 1. * TIMEOUT);
+  fprintf (stdout, "Running %zu virtual tasks (asynchronous timers of at most %g seconds) on a single worker "
+           "(virtual tasks will time out after %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, 1. * TIMEOUT);
+  fprintf (stdout, "Creating the thread pool...\n");
+  struct timespec t0;
+  timespec_get (&t0, TIME_UTC);
   struct threadpool *tp = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, 0, TP_RUN_ALL_TASKS);
   threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
+  fprintf (stdout, "Submiting virtual tasks...\n");
   for (size_t i = 0; i < NB_TIMERS; i++)
     threadpool_add_task (tp, wait, 0, 0);
+  fprintf (stdout, "Waiting for the threads to end...\n");
   threadpool_wait_and_destroy (tp);
-  fprintf (stdout, "Waiting for the remaining out of time, late, thus disregarded virtual tasks...\n");
-  static struct timespec duration = { 0, 1000000 };     /* 1 ms */
-  while (Nb_timers_done < NB_TIMERS)
+  fprintf (stdout, "The thread pool has been destroyed.\n");
+  fprintf (stdout, "Waiting for the remaining out of time, late, thus disregarded, virtual tasks to time out...\n");
+  static const struct timespec duration = { 0, 100000000 };   /* 100 ms */
+  while (Nb_timers_done <= NB_TIMERS)
+  {
+    struct timespec now;
+    timespec_get (&now, TIME_UTC);
+    fprintf (stdout, "t=%6.2fs: %'zu virtual tasks have now finisihed.\n", difftime (now.tv_sec, t0.tv_sec) + 1e-9 * (double) (now.tv_nsec - t0.tv_nsec), Nb_timers_done);
+    fflush (stdout);
+    if (Nb_timers_done >= NB_TIMERS)
+      break;
     nanosleep (&duration, 0);
-  fprintf (stdout, "All the %'zu virtual tasks have now finished.\n", Nb_timers_done);
+  }
   fprintf (stdout, "=======\n");
 }

@@ -4,7 +4,7 @@ CFLAGS+=-O
 CFLAGS+=-fPIC
 LDFLAGS=
 #LDFLAGS+=-pg
-VALGRIND=valgrind --leak-check=full --show-leak-kinds=all
+#VALGRIND=valgrind --leak-check=full --show-leak-kinds=all
 
 .PHONY: all
 all: run_examples

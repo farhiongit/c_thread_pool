@@ -100,6 +100,8 @@ void threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_h
 void threadpool_monitor_to_terminal (struct threadpool_monitor data, void *FILE_stream);
 // A convenient filter to monitor at most every 100 ms.
 int threadpool_monitor_every_100ms (struct threadpool_monitor d);
+// A function to call the monitor occasionally (shoulb be used seldom).
+void threadpool_monitor (struct threadpool *threadpool);
 
 // Virtual tasks (calling asynchronous jobs).
 // Declare the task continuation and the time out, in seconds. Returns the UID of the continuator.
