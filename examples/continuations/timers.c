@@ -68,7 +68,7 @@ wait (struct threadpool * /* tp */ , void * /*arg */ )
 static void
 monitor_handler (struct threadpool_monitor d, void *)
 {
-  fprintf (stdout, "t=%6.2fs, %'zu active worker: %'zu processing virtual tasks, "
+  fprintf (stdout, "t=%6.2fs: %'zu active worker, %'zu processing virtual tasks, "
            "%'zu virtual tasks have succeeded, %'zu will definitely be out of time (over %'zu submitted).\n",
            d.time, d.workers.nb_alive, d.tasks.nb_asynchronous, d.tasks.nb_succeeded, d.tasks.nb_failed, d.tasks.nb_submitted);
   fflush (stdout);

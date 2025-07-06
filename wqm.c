@@ -279,14 +279,8 @@ threadpool_monitor_call (struct threadpool *threadpool, int force)
     };
     struct timespec t;
     timespec_get (&t, TIME_UTC);        // C standard function, returns now.
-    if (t.tv_nsec < threadpool->monitor.t0.tv_nsec)
-    {
-      t.tv_sec--;               // -1s
-      t.tv_nsec += 1000 * 1000 * 1000;  // +1s
-    }
-    t.tv_sec -= threadpool->monitor.t0.tv_sec;
-    t.tv_nsec -= threadpool->monitor.t0.tv_nsec;
-    v.time = (double) t.tv_sec + (double) t.tv_nsec / 1e9;
+    v.time = difftime (t.tv_sec, threadpool->monitor.t0.tv_sec) // type of tv_sec is time_t, difftime does not overflow
+      + 1.e-9 * (double) (t.tv_nsec - threadpool->monitor.t0.tv_nsec);  // tv_nsec is signed.
     if (!threadpool->monitor.filter)
       force = 0;
     if (!force && threadpool->monitor.filter && !threadpool->monitor.filter (v))
