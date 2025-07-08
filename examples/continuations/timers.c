@@ -91,7 +91,7 @@ main (void)
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, "The thread pool has been destroyed.\n");
   fprintf (stdout, "Waiting for the remaining out of time, late, thus disregarded, virtual tasks to time out...\n");
-  static const struct timespec duration = { 0, 100000000 };   /* 100 ms */
+  static const struct timespec duration = { 0, 100000000 };     /* 100 ms */
   while (Nb_timers_done <= NB_TIMERS)
   {
     struct timespec now;

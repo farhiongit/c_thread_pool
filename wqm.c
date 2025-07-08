@@ -371,7 +371,7 @@ threadpool_monitor_every_100ms (struct threadpool_monitor d)
 static void
 threadpool_clear_on_exit (void)
 {
-  map_traverse (Continuators.map, MAP_REMOVE_ALL, 0, continuator_data_clear_on_exit);
+  map_traverse (Continuators.map, MAP_REMOVE_ALL, continuator_data_clear_on_exit, 0, 0);
   map_destroy (Continuators.map);
 }
 
