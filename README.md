@@ -82,11 +82,6 @@ This C standard implementation of a thread pool brings unique features, not foun
 
 Those features are detailed below.
 
-#### Extra tools
-
-- `trace.h` permits to globally trace calls to a function without changing the code (see [README](README_trace.md)).
-- `h2md` is a script that converts header files with comments ([map.h](map.h) and [trace.h](trace.h)) into markdown files ([README_map.md](README_map.md) and [README_trace.md](README_trace.md)).
-
 ### Basic functionalities
 
 | Function | Description |
