@@ -24,7 +24,7 @@ work2 (void *job)
   unsigned int number = *(unsigned int *) job;
   unsigned int sum = itos (number);     // Map
   *(unsigned int *) job = sum;
-  return sum == 11 ? TP_JOB_SUCCESS : TP_JOB_FAILURE;   // Filter
+  return sum == 5 ? TP_JOB_SUCCESS : TP_JOB_FAILURE;    // Filter
 }
 
 static int
@@ -33,7 +33,7 @@ work (void *job)
   unsigned int number = *(unsigned int *) job;
   unsigned int sum = itos (number);     // Map
   *(unsigned int *) job = sum;
-  return sum % 10 == 7 ? work2 (job) : TP_JOB_FAILURE;  // Filter
+  return sum % 10 == 0 ? work2 (job) : TP_JOB_FAILURE;  // Filter
 }
 
 static void
@@ -62,7 +62,7 @@ delete_worker_local_data (void *worker_local_data)
 int
 main (void)
 {
-  unsigned int numbers[100];
+  unsigned int numbers[15];
   for (size_t i = 0; i < sizeof (numbers) / sizeof (*numbers); i++)
   {
     numbers[i] = (unsigned int) rand ();
