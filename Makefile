@@ -4,18 +4,18 @@ CFLAGS+=-O
 CFLAGS+=-fPIC
 LDFLAGS=
 #LDFLAGS+=-pg
-#VALGRIND=valgrind --leak-check=full --show-leak-kinds=all
+#VALGRIND=valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes
 
 .PHONY: all
 all: run_examples
 
 .PHONY: help
 help:
-	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, callgraph, cloc or <language>/LC_MESSAGES/libwqm.mo"
+	@echo "Use one of those prerequisites: run_examples (default), libs, qsip_wc_test, fuzzyword, intensive, timers, mfr, callgraph, cloc or <language>/LC_MESSAGES/libwqm.mo"
 
 #### Examples
 .PHONY: run_examples
-run_examples: qsip_wc_test fuzzyword intensive timers
+run_examples: qsip_wc_test fuzzyword intensive timers mfr
 
 .PHONY: qsip_wc_test
 qsip_wc_test: libs examples/qsip/qsip_wc_test
@@ -42,6 +42,12 @@ timers: libs examples/continuations/timers
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(VALGRIND) ./examples/continuations/timers
 	@echo "*********************"
 
+.PHONY: mfr
+mfr: libs examples/mfr/mfr
+	@echo "********* $@ ************"
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(VALGRIND) ./examples/mfr/mfr
+	@echo "*********************"
+
 examples/qsip/qsip_wc_test: LDFLAGS+=-L. -L../minimaps
 examples/qsip/qsip_wc_test: LDLIBS=-lwqm -ltimer -lmap
 examples/qsip/qsip_wc_test: examples/qsip/qsip_wc_test.o examples/qsip/qsip_wc.o
@@ -60,19 +66,20 @@ examples/fuzzyword/fuzzyword: CPPFLAGS+=-DCOLLATE
 examples/fuzzyword/fuzzyword: CPPFLAGS+=-I. -I../minimaps
 examples/fuzzyword/fuzzyword: LDFLAGS+=-L. -L../minimaps
 examples/fuzzyword/fuzzyword: LDLIBS=-lwqm -ltimer -lmap
-examples/fuzzyword/fuzzyword: examples/fuzzyword/fuzzyword.c
 
 examples/intensive/intensive: CFLAGS+=-std=c23
 examples/intensive/intensive: CPPFLAGS+=-I. -I../minimaps
 examples/intensive/intensive: LDFLAGS+=-L. -L../minimaps
 examples/intensive/intensive: LDLIBS=-lwqm -ltimer -lmap
-examples/intensive/intensive: examples/intensive/intensive.c
 
 examples/continuations/timers: CFLAGS+=-std=c23
 examples/continuations/timers: CPPFLAGS+=-I. -I../minimaps
 examples/continuations/timers: LDFLAGS+=-L. -L../minimaps
 examples/continuations/timers: LDLIBS=-lwqm -ltimer -lmap
-examples/continuations/timers: examples/continuations/timers.c
+
+examples/mfr/mfr: CPPFLAGS+=-I. -I../minimaps
+examples/mfr/mfr: LDFLAGS+=-L. -L../minimaps
+examples/mfr/mfr: LDLIBS+=-lwqm -ltimer -lmap
 
 #### Tools
 .PHONY: callgraph

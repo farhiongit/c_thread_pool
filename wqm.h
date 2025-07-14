@@ -24,8 +24,16 @@ extern const tp_property_t TP_RUN_ALL_SUCCESSFUL_TASKS; // Runs submitted tasks 
 extern const tp_property_t TP_RUN_ONE_SUCCESSFUL_TASK;  // Runs submitted tasks until one succeeds. Cancel automatically other (already or to be) submitted tasks.
 struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, tp_property_t property);
 
+// Returns the current thread pool.
+void *threadpool_current (void);
+
 // Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);
+
+typedef int tp_result_t;
+extern const tp_result_t TP_JOB_SUCCESS;
+extern const tp_result_t TP_JOB_FAILURE;
+extern const tp_result_t TP_JOB_CANCELED;
 
 // Call to 'threadpool_add_task' is MT-safe.
 // Tasks can be submitted to workers. They will be processed in parallel distributed over workers of the threadpool.
@@ -38,26 +46,30 @@ void *threadpool_global_data (void);
 // Argument 'job_delete' is optional (see below).
 // Returns 0 on error, a unique id of the submitted task otherwise.
 // Set errno to ENOMEM on error (out of memory).
-size_t threadpool_add_task (struct threadpool *threadpool, int (*work) (struct threadpool * threadpool, void *job), void *job, void (*job_delete) (void *job));
+typedef size_t tp_task_t;
+tp_task_t threadpool_add_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, void (*job_delete) (void *job, tp_result_t result));
+
+// A handler is provided for convenience. It calls 'free' on 'job', whatever the value of 'result'.
+void threadpool_job_free_handler (void *job, tp_result_t result);
 
 // ** Options for 'threadpool_add_job' **
 // Call to 'job_delete' is MT-safe and, if not null, is done once per job (no less no more) right after the job has been completed by 'worker'.
-// 'job_delete' is passed, as argument, the 'job' added by 'threadpool_add_job'.
-// 'job_delete' is useful if the 'job' passed to 'threadpool_add_job' has been allocated dynamically and needs to be free'd after use.
+// 'job_delete' is passed, as argument, the 'job' added by 'threadpool_add_job', as well as its result.
+// 'job_delete' can be used if the 'job' passed to 'threadpool_add_job' has been allocated dynamically and needs to be free'd after use.
 
 // Cancel a pending task identified by its unique id, as returned by threadpool_add_task, or all tasks if task_id is equal to ALL_PENDING_TASKS, or the next submitted task if task_id is equal to NEXT_PENDING_TASK, or the last if equal to LAST_PENDING_TASK.
 // Returns the number of cancelled tasks.
-extern const size_t TP_CANCEL_ALL_PENDING_TASKS;        // Cancels all pending tasks
-extern const size_t TP_CANCEL_NEXT_PENDING_TASK;        // Cancels next pending task (in submission order)
-extern const size_t TP_CANCEL_LAST_PENDING_TASK;        // Cancels last pending tasks (in submission order)
-size_t threadpool_cancel_task (struct threadpool *threadpool, size_t task_id);
+extern const tp_task_t TP_CANCEL_ALL_PENDING_TASKS;     // Cancels all pending tasks
+extern const tp_task_t TP_CANCEL_NEXT_PENDING_TASK;     // Cancels next pending task (in submission order)
+extern const tp_task_t TP_CANCEL_LAST_PENDING_TASK;     // Cancels last pending tasks (in submission order)
+size_t threadpool_cancel_task (struct threadpool *threadpool, tp_task_t task_id);
 
 // Once all tasks have been submitted to the threadpool, 'threadpool_wait_and_destroy' waits for all the tasks to be finished and thereafter destroys the threadpool.
 // 'threadpool' should not be used after a call to 'threadpool_wait_and_destroy'.
 void threadpool_wait_and_destroy (struct threadpool *threadpool);
 
-// Manage local data or workers.
-// make_local will be called when a worker is created and delete_local when it is terminated.
+// Manage local data of workers.
+// 'make_local' will be called when a worker is created and 'delete_local' when it is terminated.
 // Call to 'make_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker initialisation.
 // Call to 'delete_local' is MT-safe and, if not null, is done once per worker thread (no less no more) at worker termination.
 void threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(*make_local) (void), void (*delete_local) (void *local_data));
@@ -105,7 +117,7 @@ void threadpool_monitor (struct threadpool *threadpool);
 
 // Virtual tasks (calling asynchronous jobs).
 // Declare the task continuation and the time out, in seconds. Returns the UID of the continuator.
-uint64_t threadpool_task_continuation (int (*work) (struct threadpool * threadpool, void *data), double seconds);
-// Call the task continuation. Returns EXIT_SUCCESS if the continuator UID was previously declared and has not timed out, EXIT_FAILURE (with errno set to ETIMEDOUT) otherwise.
-int threadpool_task_continue (uint64_t uid);
+uint64_t threadpool_task_continuation (tp_result_t (*work) (void *data), double seconds);
+// Call the task continuation. Returns TP_JOB_SUCCESS if the continuator UID was previously declared and has not timed out, TP_JOB_FAILURE (with errno set to ETIMEDOUT) otherwise.
+tp_result_t threadpool_task_continue (uint64_t uid);
 #endif

@@ -184,7 +184,7 @@ hoare (Job *job, GlobalData *g, LocalData *l)
 }
 
 static int
-work (struct threadpool *threadpool, void *j)
+work (void *j)
 {
   Job *job = j;
   DPRINTF ("Job         (%1$p, %2$'zu) is being processed...\n", job->base, job->nmemb);
@@ -202,13 +202,13 @@ work (struct threadpool *threadpool, void *j)
                                 });
     EXEC_OR_ABORT (new_job1);
     DPRINTF ("Job         (%1$p, %2$'zu) to be added to jobs ...\n", new_job1->base, new_job1->nmemb);
-    threadpool_add_task (threadpool, work, new_job1, free);
+    threadpool_add_task (threadpool_current (), work, new_job1, threadpool_job_free_handler);
     Job *new_job2 = job_create ((Job) {
                                 .base = p2 + g->elem_size,.nmemb = job->nmemb - 1 - ((typeof (job->nmemb)) (p2 - job->base) / g->elem_size),
                                 });
     EXEC_OR_ABORT (new_job2);
     DPRINTF ("Job         (%1$p, %2$'zu) to be added to jobs ...\n", new_job2->base, new_job2->nmemb);
-    threadpool_add_task (threadpool, work, new_job2, free);
+    threadpool_add_task (threadpool_current (), work, new_job2, threadpool_job_free_handler);
     DPRINTF ("Job         (%1$p, %2$'zu) made %3$'zu swaps.\n", job->base, job->nmemb, l->nb_swaps);
   }                             // if (data.nmemb >= 2)
   DPRINTF ("Job         (%1$p, %2$'zu) processed.\n", job->base, job->nmemb);

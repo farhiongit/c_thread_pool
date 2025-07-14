@@ -50,14 +50,14 @@ timer_handler (void *arg)
 }
 
 static int
-resume (struct threadpool * /* tp */ , void * /* arg */ )
+resume (void *)
 {
   // Do whatever wanted here at asynchronous task termination;
   return EXIT_SUCCESS;
 }
 
 static int
-wait (struct threadpool * /* tp */ , void * /*arg */ )
+wait (void *)
 {
   struct async_task_wrapper *task = async_task_create (1. * MAXDELAY * rand () / RAND_MAX);
   assert ((task->uid = threadpool_task_continuation (resume, TIMEOUT)));        // Declare continuation (resume).

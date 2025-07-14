@@ -6,7 +6,7 @@
 #include "wqm.h"
 
 static int
-worker (struct threadpool *, void *)
+worker (void *)
 {
   sleep (1);
   return EXIT_SUCCESS;

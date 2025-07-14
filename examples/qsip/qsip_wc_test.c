@@ -64,9 +64,8 @@ untag (void *local)
 }
 
 static int
-worker (struct threadpool *threadpool, void *base)
+worker (void *base)
 {
-  (void) threadpool;
   int ret = 0;
   (void) cmpi;                  // Avoid ‘cmpi’ defined but not used
 #if 1
@@ -152,7 +151,7 @@ main ()
   threadpool_cancel_task (tp, task_id);
   fprintf (stdout, _("Add and cancel void task (twice).\n"));
   threadpool_add_task (tp, 0, 0, 0);
-  threadpool_add_task (tp, 0, malloc (1), free);
+  threadpool_add_task (tp, 0, malloc (1), threadpool_job_free_handler);
   sleep (1);
   fprintf (stdout, _("Canceling two tasks (last submitted and pending).\n"));
   threadpool_cancel_task (tp, TP_CANCEL_LAST_PENDING_TASK);

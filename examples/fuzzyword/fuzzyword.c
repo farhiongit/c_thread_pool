@@ -53,11 +53,11 @@ struct tp2_job
 };
 
 static void
-tp2_job_free (void *arg)
+tp2_job_free (void *arg, tp_result_t res)
 {
   struct tp2_global *tp2_global = threadpool_global_data ();
   struct tp2_job *tp2_job = arg;
-  if (tp2_job->result.d <= tp2_global->dmatch)  // Aggregation for job results.
+  if (res == TP_JOB_SUCCESS && tp2_job->result.d <= tp2_global->dmatch) // Aggregation for job results.
   {
     tp2_global->match = tp2_job->result.match;
     tp2_global->dmatch = tp2_job->result.d;
@@ -97,9 +97,8 @@ dld (size_t lwa, const wchar_t *wa, size_t lwb, const wchar_t *wb, int transpose
 }
 
 static int
-tp2_worker (struct threadpool *threadpool, void *arg)
+tp2_worker (void *arg)
 {
-  (void) threadpool;
   struct tp2_job *tp2 = arg;
   tp2->result.d = dld (wcslen (tp2->input.word), tp2->input.word, wcslen (tp2->input.fuzzyword), tp2->input.fuzzyword, 1);
   tp2->result.match = tp2->input.realword;
@@ -185,10 +184,10 @@ struct tp1_job
 };
 
 static void
-tp1_job_free (void *arg)
+tp1_job_free (void *arg, tp_result_t res)
 {
   struct tp1_job *ta = arg;
-  if (ta->result.match_ref)
+  if (res == TP_JOB_SUCCESS && ta->result.match_ref)
     fprintf (stdout, "\"%1$ls\" => \"%2$ls\"\n", ta->input.wa, ta->result.match_ref);   // Job post-processing.
 
   free (ta->input.wa);
@@ -244,9 +243,8 @@ get_match (wchar_t *wa, size_t nb_lines, const wchar_t (*const lines)[100], wcha
 }
 
 static int
-tp1_worker (struct threadpool *threadpool, void *arg)
+tp1_worker (void *arg)
 {
-  (void) threadpool;
   struct tp1_job *ta = arg;
   struct tp1_resource *tp1_resource = threadpool_global_resource ();
   ta->result.match_ref = get_match (ta->input.wa, tp1_resource->nb_lines, tp1_resource->lines, tp1_resource->colllines);
