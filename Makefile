@@ -4,7 +4,8 @@ CFLAGS+=-O
 CFLAGS+=-fPIC
 LDFLAGS=
 #LDFLAGS+=-pg
-#VALGRIND=valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes
+#CHECK=valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes
+#CHECK=gdb
 
 .PHONY: all
 all: run_examples
@@ -39,13 +40,13 @@ intensive: libs examples/intensive/intensive
 .PHONY: timers
 timers: libs examples/continuations/timers
 	@echo "********* $@ ************"
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(VALGRIND) ./examples/continuations/timers
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(CHECK) ./examples/continuations/timers
 	@echo "*********************"
 
 .PHONY: mfr
 mfr: libs examples/mfr/mfr
 	@echo "********* $@ ************"
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(VALGRIND) ./examples/mfr/mfr
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.:../minimaps $(CHECK) ./examples/mfr/mfr
 	@echo "*********************"
 
 examples/qsip/qsip_wc_test: LDFLAGS+=-L. -L../minimaps
