@@ -508,7 +508,7 @@ thread_worker_runner (void *args)
       thrd_honored (cnd_broadcast (&threadpool->proceed_or_conclude_or_runoff));        // broadcast it to unblock and finish all pending threads.
     break;                      // Work is done or the predicate was not fulfilled due to timeout. Quit.
   }                             // while (1)
-  void *localdata = threadpool_worker_local_data ();
+  void *localdata = Worker_context.local_data;
   Worker_context.local_data = 0;
   if (threadpool->worker_local_data_manager.destroy)
     threadpool->worker_local_data_manager.destroy (localdata);
