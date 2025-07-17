@@ -17,28 +17,32 @@ struct stream
   {
     tp_result_t (*f) (void *job, void *arg);    // Function
     void *arg;                  // Argument
-  } *mapper;
+  } *mappers;
   struct
   {
-    void *aggregate;            // Global aggregator
+    void *aggregate;            // Result of the stream after aggregation
     void *(*id) (void);         // Aggregate initialiser
-    void (*aggregator) (void *aggregate, void *job);    // Job aggregator and job cleaner
-    void (*job_delete) (void *);
-    void (*merger) (void *agg1, void *agg2);    // Worker merger
-  } r;
+    void (*aggregator) (void *aggregate, void *job);    // Job aggregator
+    void (*job_delete) (void *);        //  Job cleaner after aggregation
+    void (*merger) (void *agg1, void *agg2);    // Worker merger that allows to merge 2 aggregates of workers into 1
+  } reducer;
 };
 
 static tp_result_t
 mapfilter (void *job)
 {
   struct stream *stream = threadpool_global_data ();
+  if (!stream)
+    return TP_JOB_FAILURE;
   tp_result_t ret = TP_JOB_SUCCESS;
   for (size_t i = 0; i < stream->nb_mappers && ret == TP_JOB_SUCCESS; i++)
-    ret = (stream->mapper[i].f) (job, stream->mapper[i].arg);   // Map or filter
+    if (stream->mappers[i].f)
+      ret = stream->mappers[i].f (job, stream->mappers[i].arg); // Map or filter
   void *aggregate;
-  if (ret == TP_JOB_SUCCESS && stream->r.merger && stream->r.aggregator && (aggregate = threadpool_worker_local_data ()))
-    stream->r.aggregator (aggregate, job);      // Reduce on worker basis
-  stream->r.job_delete (job);
+  if (ret == TP_JOB_SUCCESS && stream->reducer.merger && stream->reducer.aggregator && (aggregate = threadpool_worker_local_data ()))
+    stream->reducer.aggregator (aggregate, job);        // Reduce on worker basis
+  if (stream->reducer.job_delete)
+    stream->reducer.job_delete (job);
   return ret;
 }
 
@@ -49,21 +53,16 @@ reduce (void *job, tp_result_t ret)
   {
     struct stream *stream = threadpool_global_data ();
     void *aggregate = threadpool_worker_local_data ();
-    if ((!stream->r.merger || !aggregate) && stream->r.aggregator && (aggregate = stream->r.aggregate))
-      stream->r.aggregator (aggregate, job);    // Reduce on thread pool basis
+    if ((!stream->reducer.merger || !aggregate) && stream->reducer.aggregator && (aggregate = stream->reducer.aggregate))
+      stream->reducer.aggregator (aggregate, job);      // Reduce on thread pool basis
   }
 }
 
-// ------------- Worker local aggregator ---------
-static void *
-make_worker_local_data (void)
+// ------------------ Job -------
+struct job
 {
-  struct stream *stream = threadpool_global_data ();
-  size_t *count = 0;
-  if (stream->r.merger && (count = malloc (sizeof (*count))))
-    *count = *(size_t *) stream->r.id ();       // Worker local aggregator
-  return count;
-}
+  unsigned int data;
+};
 
 static void
 job_delete (void *job)
@@ -72,23 +71,7 @@ job_delete (void *job)
   (void) job;
 }
 
-static void
-aggregate_delete (void *aggregate)
-{
-  free (aggregate);
-}
-
-static void
-delete_worker_local_data (void *worker_local_data)
-{
-  struct stream *stream = threadpool_global_data ();
-  if (stream->r.merger && worker_local_data)
-    stream->r.merger (stream->r.aggregate, worker_local_data);  // Reduce on thread pool basis
-  // Freeing aggregate should be done here if necessary.
-  aggregate_delete (worker_local_data);
-}
-
-// ------- Stream operators ------------
+// ------- Stream mappers and filters ------------
 static unsigned int
 itos (unsigned int number)
 {
@@ -102,16 +85,16 @@ static tp_result_t
 adddigits (void *job, void *arg)
 {
   (void) arg;
-  unsigned int number = *(unsigned int *) job;
+  unsigned int number = ((struct job *) job)->data;
   unsigned int sum = itos (number);     // Map
-  *(unsigned int *) job = sum;
+  ((struct job *) job)->data = sum;
   return TP_JOB_SUCCESS;
 }
 
 static tp_result_t
 multipleof (void *job, void *arg)
 {
-  unsigned int number = *(unsigned int *) job;
+  unsigned int number = ((struct job *) job)->data;
   unsigned int div = *(unsigned int *) arg;
   return number % div == 0 ? TP_JOB_SUCCESS : TP_JOB_FAILURE;   // Filter
 }
@@ -119,15 +102,21 @@ multipleof (void *job, void *arg)
 static tp_result_t
 equals (void *job, void *arg)
 {
-  unsigned int number = *(unsigned int *) job;
+  unsigned int number = ((struct job *) job)->data;
   unsigned int val = *(unsigned int *) arg;
   return number == val ? TP_JOB_SUCCESS : TP_JOB_FAILURE;       // Filter
 }
 
+// ------- Stream reducer into aggregate ------------
+struct aggregate
+{
+  size_t data;
+};
+
 static void *
 id (void)
 {
-  static size_t zero = 0;
+  static struct aggregate zero = { 0 };
   return &zero;                 // Identity
 }
 
@@ -135,42 +124,65 @@ static void
 increment (void *a, void *job)
 {
   (void) job;
-  size_t *c = a;
-  *c += 1;                      // Aggregator
+  struct aggregate *c = a;
+  c->data += 1;                 // Aggregator
 }
 
+// ------------- Worker local aggregator ---------
 static void
 add (void *a, void *b)
 {
-  size_t *ca = a;
-  size_t *cb = b;
-  *ca += *cb;                   // Merger
+  struct aggregate *ca = a;
+  struct aggregate *cb = b;
+  ca->data += cb->data;         // Merger of local aggregates
 }
 
+static void *
+make_worker_local_data (void)
+{
+  struct stream *stream = threadpool_global_data ();
+  struct aggregate *count = 0;
+  if (stream->reducer.merger && (count = malloc (sizeof (*count))))
+    count->data = ((struct aggregate *) stream->reducer.id ())->data;   // Initialise the worker local aggregator
+  return count;
+}
+
+static void
+aggregate_and_delete_worker_local_data (void *worker_local_data)
+{
+  struct stream *stream = threadpool_global_data ();
+  if (stream->reducer.merger && worker_local_data)
+    stream->reducer.merger (stream->reducer.aggregate, worker_local_data);      // Merge worker aggregates into the thread pool aggregated result
+  // Freeing aggregate should be done here if necessary.
+  free (worker_local_data);
+}
+
+// -----------------------------------------
 int
 main (void)
 {
-  static const int WORKER_LOCAL_AGGREGATION = 1;
-  unsigned int numbers[15];
+  static const int WORKER_LOCAL_AGGREGATION_IS_ACTIVE = 1;
+  struct job numbers[15];
   for (size_t i = 0; i < sizeof (numbers) / sizeof (*numbers); i++)
   {
-    numbers[i] = (unsigned int) rand ();
-    fprintf (stdout, "%u (%u) ; ", numbers[i], itos (numbers[i]));
+    numbers[i].data = (unsigned int) rand ();
+    fprintf (stdout, "%u (%u) ; ", numbers[i].data, itos (numbers[i].data));
   }
   fprintf (stdout, "\n");
   static unsigned int f_arg_1 = 10;
   static unsigned int f_arg_2 = 5;
-  static struct mapper mappers[] = { {adddigits, 0}, {multipleof, &f_arg_1}, {adddigits, 0}, {equals, &f_arg_2}, };
-  size_t counter = *(size_t *) id ();   // Aggreagte
+  static struct mapper mappers[] = { {.f = adddigits}, {.f = multipleof,.arg = &f_arg_1}, {.f = adddigits}, {.f = equals,.arg = &f_arg_2}, };
+  struct aggregate counter = {.data = *(size_t *) id () };      // Aggreagte
   (void) add;
-  struct stream stream = { sizeof (mappers) / sizeof (*mappers), mappers, {&counter, id, increment, job_delete, WORKER_LOCAL_AGGREGATION ? add : 0}
+  struct stream stream = {.nb_mappers = sizeof (mappers) / sizeof (*mappers),.mappers = mappers,.reducer = {.aggregate = &counter,.id = id,.aggregator = increment,.job_delete =
+                                                                                                            job_delete,.merger = (WORKER_LOCAL_AGGREGATION_IS_ACTIVE ? add : 0)}
   };
   struct threadpool *threadpool = threadpool_create_and_start (TP_WORKER_NB_CPU, &stream, TP_RUN_ALL_TASKS);
-  threadpool_set_worker_local_data_manager (threadpool, make_worker_local_data, delete_worker_local_data);
+  threadpool_set_worker_local_data_manager (threadpool, make_worker_local_data, aggregate_and_delete_worker_local_data);
   threadpool_set_monitor (threadpool, threadpool_monitor_to_terminal, 0, 0);
   for (size_t i = 0; i < sizeof (numbers) / sizeof (*numbers); i++)
     threadpool_add_task (threadpool, mapfilter, numbers + i, reduce);
   threadpool_wait_and_destroy (threadpool);
-  fprintf (stdout, "%zu\n", *(size_t *) stream.r.aggregate);
-  // Freeing aggregate should be done here if necessary.
+  fprintf (stdout, "%zu\n", *(size_t *) stream.reducer.aggregate);
+  // Freeing aggregate stream.reducer.aggregate should be done here if necessary.
 }
