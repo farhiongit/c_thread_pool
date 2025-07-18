@@ -1,8 +1,5 @@
-/*
-    - map digit to text
-    - filter text with length equal to 3
-    - count the number of elements found
- */
+// Map, filter, reduce pattern parallelised by a thread pool.
+// (c) L. Farhi, 2025
 #include "wqm.h"
 #include "mfr.h"
 
@@ -33,12 +30,14 @@ reduce (void *job, tp_result_t ret)
   }
 }
 
-tp_task_t threadpool_add_stream (struct threadpool *threadpool, void *job)
+tp_task_t
+threadpool_add_task_to_stream (struct threadpool *threadpool, void *job)
 {
   return threadpool_add_task (threadpool, mapfilter, job, reduce);
 }
 
-struct threadpool *threadpool_create_and_start_stream (size_t nb_workers, struct stream *stream, tp_property_t property)
+struct threadpool *
+threadpool_create_and_start_stream (size_t nb_workers, struct stream *stream, tp_property_t property)
 {
   return threadpool_create_and_start (nb_workers, stream, property);
 }

@@ -81,7 +81,6 @@ examples/continuations/timers: LDLIBS=-lwqm -ltimer -lmap
 examples/mfr/mfr: CPPFLAGS+=-I. -I../minimaps
 examples/mfr/mfr: LDFLAGS+=-L. -L../minimaps
 examples/mfr/mfr: LDLIBS+=-lwqm -ltimer -lmap
-examples/mfr/mfr: CFLAGS=-o examples/mfr/mfr
 examples/mfr/mfr: examples/mfr/mfr.c examples/mfr/mfr_test.c
 
 #### Tools
