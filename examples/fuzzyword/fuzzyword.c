@@ -52,7 +52,7 @@ struct tp2_job
   } result;
 };
 
-static void
+static tp_result_t
 tp2_job_free (void *arg, tp_result_t res)
 {
   struct tp2_global *tp2_global = threadpool_global_data ();
@@ -63,6 +63,7 @@ tp2_job_free (void *arg, tp_result_t res)
     tp2_global->dmatch = tp2_job->result.d;
   }
   free (arg);
+  return res;
 }
 
 // https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance
@@ -183,7 +184,7 @@ struct tp1_job
   } result;
 };
 
-static void
+static tp_result_t
 tp1_job_free (void *arg, tp_result_t res)
 {
   struct tp1_job *ta = arg;
@@ -192,6 +193,7 @@ tp1_job_free (void *arg, tp_result_t res)
 
   free (ta->input.wa);
   free (ta);
+  return res;
 }
 
 #undef COLLATE

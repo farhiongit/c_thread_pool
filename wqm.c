@@ -73,9 +73,9 @@ struct threadpool
       struct job
       {
         void *data;
-        void (*data_delete) (void *data, tp_result_t result);
+          tp_result_t (*data_delete) (void *data, tp_result_t result);
       } job;
-      int (*work) (void *data);
+        tp_result_t (*work) (void *data);
       size_t id;
       int to_be_continued;
       int is_continuation;
@@ -117,18 +117,9 @@ struct continuator_data
   struct job job;
   int (*work) (void *data);
   uint64_t uid;
-  uint64_t *p_uid;
   void *timeout_timer;
   struct threadpool *threadpool;
 };
-
-static void
-continuator_data_clear_on_exit (void *data)
-{
-  struct continuator_data *c = data;
-  free (c->p_uid);
-  free (c);
-}
 
 static const void *
 continuator_data_get_key (void *pa)
@@ -151,13 +142,20 @@ static struct
   map *map;
 } Continuators = { 0 };
 
+static void
+continuators_clear_on_exit (void)
+{
+  if (Continuators.map)
+    map_traverse (Continuators.map, MAP_REMOVE_ALL, free, 0, 0);
+}
+
 static int
 threadpool_task_continuator_timeout_operator (void *data, void *res, int *remove)
 {
   (void) res;
   struct continuator_data *continuator = data;
   continuator->threadpool->nb_failed_tasks++;
-  if (continuator->job.data_delete)     // The job won't be processed : delete it.
+  if (continuator->job.data_delete)     // The job won't be processed : delete it and discard its returned value.
     continuator->job.data_delete (continuator->job.data, TP_JOB_FAILURE);
   assert (continuator->threadpool->nb_async_tasks--);   // The predicate threadpool_is_done_predicate is modified: broadcast.
   // Do not broadcast before the continuator is thrown away.
@@ -168,13 +166,14 @@ threadpool_task_continuator_timeout_operator (void *data, void *res, int *remove
 }
 
 static void
-threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler
+threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler (the response of the virtual task arrives too late)
 {
+  if (!Continuators.map)
+    return;
   map_find_key (Continuators.map, p_uid, threadpool_task_continuator_timeout_operator, 0);
-  free (p_uid);
 }
 
-static size_t threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, void (*job_delete) (void *job, tp_result_t result),
+static size_t threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, tp_result_t (*job_delete) (void *job, tp_result_t result),
                                       int is_continuation);
 
 static int
@@ -192,7 +191,7 @@ threadpool_task_continuator_continue_operator (void *data, void *res, int *remov
   // Remove the asynchronous task (after the continuator has been converted into a task to keep threadpool_is_done_predicate true).
   assert (continuator->threadpool->nb_async_tasks--);
   // Broadcast (but not before the continuator has been converted into a task).
-  //timer_unset (continuator->timeout_timer);     // Too slow
+  timer_unset (continuator->timeout_timer);
   thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
   // continuator->p_uid is NOT free'd.
   free (continuator);           // Remove the continuator.
@@ -203,7 +202,7 @@ threadpool_task_continuator_continue_operator (void *data, void *res, int *remov
 tp_result_t
 threadpool_task_continue (uint64_t uid)
 {
-  if (!map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, 0))
+  if (!Continuators.map || !map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, 0))
   {
     errno = ETIMEDOUT;
     return TP_JOB_FAILURE;
@@ -215,7 +214,15 @@ threadpool_task_continue (uint64_t uid)
 uint64_t
 threadpool_task_continuation (tp_result_t (*work) (void *data), double seconds)
 {
+  if (!Continuators.map)
+  {
+    errno = EPERM;
+    return 0;
+  }
+
   static atomic uint32_t seq = 0;
+  if (!seq)
+    seq = (uint32_t) (rand () % RAND_MAX + 1);  // in [1 ; RAND_MAX ]
   if (!Worker_context.threadpool || !Worker_context.current_task || Worker_context.current_task->to_be_continued)
   {
     fprintf (stderr, "%s: %s\n", __func__, _("Operation not permitted."));
@@ -247,11 +254,7 @@ threadpool_task_continuation (tp_result_t (*work) (void *data), double seconds)
       + (((uint64_t) rand ()) << 32);   // Most significant (random)
   }
   while (!map_insert_data (Continuators.map, continuator));     // continuator is inserted in the map.
-  uint64_t *p_uid = malloc (sizeof (*p_uid));
-  continuator->p_uid = p_uid;
-  *p_uid = continuator->uid;    // p_uid will not fade out and will survive the continuator.
-  // p_uid will be passed to the timer handler threadpool_task_continuation_timeout_handler where it will be free'd.
-  continuator->timeout_timer = timer_set (abs_timeout, threadpool_task_continuation_timeout_handler, p_uid);
+  continuator->timeout_timer = timer_set (abs_timeout, threadpool_task_continuation_timeout_handler, &continuator->uid);
   continuator->threadpool->nb_async_tasks++;
   return continuator->uid;
 }
@@ -266,11 +269,12 @@ threadpool_monitor_exec (void *data)
   return 0;
 }
 
-void
+tp_result_t
 threadpool_job_free_handler (void *job, tp_result_t result)
 {
   (void) result;
   free (job);
+  return result;
 }
 
 static void
@@ -319,7 +323,6 @@ threadpool_set_monitor (struct threadpool *threadpool, threadpool_monitor_handle
   threadpool->monitor.filter = filter;
   if (new && !threadpool->monitor.processor)
     threadpool->monitor.processor = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, &threadpool->monitor.last_time, TP_RUN_ALL_TASKS);
-  //threadpool_monitor_call (threadpool, 0);
   thrd_honored (mtx_unlock (&threadpool->mutex));
 }
 
@@ -380,14 +383,17 @@ threadpool_monitor_every_100ms (struct threadpool_monitor d)
 static void
 threadpool_clear_on_exit (void)
 {
-  map_traverse (Continuators.map, MAP_REMOVE_ALL, continuator_data_clear_on_exit, 0, 0);
+  if (!Continuators.map)
+    return;
+  continuators_clear_on_exit ();
   map_destroy (Continuators.map);
 }
 
 static void
 threadpool_init (void)          // Called once.
 {
-  Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1);
+  if (!(Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1)))      // Sorted map.
+    fprintf (stderr, "%s: %s\n", __func__, _("Out of memory. Virtual tasks not managed."));
   atexit (threadpool_clear_on_exit);
 }
 
@@ -402,14 +408,17 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, tp_property_t
 #ifdef __GLIBC__
     if (!(nb_workers = (size_t) get_nprocs ()))
 #endif
-      goto on_error;
+    {
+      fprintf (stderr, "%s: %s\n", __func__, _("Unknown number of CPU. Number of workers forced to 1."));
+      nb_workers = 1;
+    }
   threadpool->property = property;
   threadpool->requested_nb_workers = nb_workers;
   if (!(threadpool->worker_id = malloc (threadpool->requested_nb_workers * sizeof (*threadpool->worker_id))))
     goto on_error;
   if (!(threadpool->active_worker_id = calloc (threadpool->requested_nb_workers, sizeof (*threadpool->active_worker_id))))      // All set to 0.
     goto on_error;
-  thrd_honored (mtx_init (&threadpool->mutex, mtx_plain));
+  thrd_honored (mtx_init (&threadpool->mutex, mtx_plain | mtx_recursive));
   thrd_honored (cnd_init (&threadpool->proceed_or_conclude_or_runoff));
   threadpool->global_data = global_data;
   threadpool->worker_local_data_manager.make = 0;
@@ -481,26 +490,38 @@ thread_worker_runner (void *args)
         assert (threadpool->nb_pending_tasks--);
         threadpool->nb_processing_tasks++;      // The extracted data has to be processed somewhere.
         threadpool_monitor_call (threadpool, 0);        // Processing worker
-        Worker_context.current_task = &old_elem->task;
+        Worker_context.current_task = &old_elem->task;  // Used if 'threadpool_task_continuation' is called in a task.
         thrd_honored (mtx_unlock (&threadpool->mutex)); // Unlock
         ret = old_elem->task.work (old_elem->task.job.data);    //<<<<<<<<<< work <<<<<<<<<<< (N.B.: work could itself add tasks by calling 'threadpool_add_task').
-        if (old_elem->task.to_be_continued)
-          /* Nothing */ ;
-        else if ((threadpool->property == TP_RUN_ALL_SUCCESSFUL_TASKS && ret != TP_JOB_SUCCESS) || (threadpool->property == TP_RUN_ONE_SUCCESSFUL_TASK && ret == TP_JOB_SUCCESS))
-          threadpool_cancel_task (threadpool, TP_CANCEL_ALL_PENDING_TASKS);     // Cancel automatically other already submitted tasks.
         thrd_honored (mtx_lock (&threadpool->mutex));   // Relock
+        if (ret != TP_JOB_SUCCESS)
+          old_elem->task.to_be_continued = 0;   // We won't consider the continuation
         Worker_context.current_task = 0;
         assert (threadpool->nb_processing_tasks--);
-        if (old_elem->task.to_be_continued)
-          /* Nothing */ ;
-        else if (ret != TP_JOB_SUCCESS)
-          threadpool->nb_failed_tasks++;
-        else
-          threadpool->nb_succeeded_tasks++;
-      }
-      threadpool_monitor_call (threadpool, 0);
+      }                         // if (old_elem->task.work)
+      // Update ret with the result of the job deletor (which can hold aggregation)
       if (!old_elem->task.to_be_continued && old_elem->task.job.data_delete)    // Call to task.job.data_delete is MT-safe (guarded by threadpool->mutex)
-        old_elem->task.job.data_delete (old_elem->task.job.data, ret);  // Note (*): get rid of job after use (and if it is not scheduled in a continuation).
+        ret = old_elem->task.job.data_delete (old_elem->task.job.data, ret);    // Note (*): get rid of job after use (and if it is not scheduled in a continuation).
+      if (old_elem->task.work && !old_elem->task.to_be_continued)       // For a continuation task, we have to wait for the continuation before we know the final result.
+      {
+        switch (ret)
+        {
+          case TP_JOB_FAILURE:
+            threadpool->nb_failed_tasks++;
+            break;
+          case TP_JOB_SUCCESS:
+            threadpool->nb_succeeded_tasks++;
+            break;
+          case TP_JOB_CANCELED:
+            threadpool->nb_canceled_tasks++;
+            break;
+          default:
+        }
+        if ((threadpool->property == TP_RUN_ALL_SUCCESSFUL_TASKS && ret == TP_JOB_FAILURE) || (threadpool->property == TP_RUN_ONE_SUCCESSFUL_TASK && ret == TP_JOB_SUCCESS))
+          threadpool_cancel_task (threadpool, TP_CANCEL_ALL_PENDING_TASKS);     // Cancel automatically other already submitted tasks (threadpool->mutex is mtx_recursive)
+      }
+      if (old_elem->task.work)
+        threadpool_monitor_call (threadpool, 0);
       free (old_elem);
       continue;                 // while (1) 
     }                           // if (threadpool_something_to_process_predicate (threadpool))
@@ -534,34 +555,21 @@ thread_worker_runner (void *args)
 }
 
 static size_t
-threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, void (*job_delete) (void *job, tp_result_t result), int is_continuation)
+threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, tp_result_t (*job_delete) (void *job, tp_result_t result), int is_continuation)
 {
+  struct elem *new_elem = malloc (sizeof (*new_elem));
+  if (!new_elem)
+  {
+    fprintf (stderr, "%s: %s\n", __func__, _("Out of memory."));
+    errno = ENOMEM;
+    return 0;
+  }
   thrd_honored (mtx_lock (&threadpool->mutex));
   if (!is_continuation)
     if ((threadpool->property == TP_RUN_ONE_SUCCESSFUL_TASK && threadpool->nb_succeeded_tasks)
         || (threadpool->property == TP_RUN_ALL_SUCCESSFUL_TASKS && threadpool->nb_failed_tasks))
       work = 0;                 // Cancel automatically new submitted tasks.
-  if (!work)                    // Cancel task immediately.
-  {
-    threadpool->nb_submitted_tasks++;
-    threadpool->nb_canceled_tasks++;
-    if (job_delete)
-      job_delete (job, TP_JOB_CANCELED);
-    if (++threadpool->nb_created_tasks == TP_CANCEL_ALL_PENDING_TASKS)
-      threadpool->nb_created_tasks = 1; // Overflow. Wrap around.
-    size_t id = threadpool->nb_created_tasks;   // task.id starts from 1.
-    thrd_honored (mtx_unlock (&threadpool->mutex));
-    return id;
-  }
 
-  struct elem *new_elem = malloc (sizeof (*new_elem));
-  if (!new_elem)
-  {
-    thrd_honored (mtx_unlock (&threadpool->mutex));
-    fprintf (stderr, "%s: %s\n", __func__, _("Out of memory."));
-    errno = ENOMEM;
-    return 0;
-  }
   struct task task = {.job.data = job,.work = work,.job.data_delete = job_delete,.to_be_continued = 0,.is_continuation = is_continuation };
   new_elem->task = task;
   new_elem->next = 0;
@@ -575,9 +583,12 @@ threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void
   if (++threadpool->nb_created_tasks == TP_CANCEL_ALL_PENDING_TASKS)
     threadpool->nb_created_tasks = 1;   // Overflow. Wrap around.
   size_t id = new_elem->task.id = threadpool->nb_created_tasks; // task.id starts from 1.
-  if (!is_continuation)
+  if (!is_continuation)         // A continuation need not be counted again.
     threadpool->nb_submitted_tasks++;
-  threadpool->nb_pending_tasks++;
+  if (work)
+    threadpool->nb_pending_tasks++;
+  else
+    threadpool->nb_canceled_tasks++;
   if (threadpool->nb_idle_workers)      // A job has been added to the thread pool of workers and at least one worker is idle and available:
     thrd_honored (cnd_signal (&threadpool->proceed_or_conclude_or_runoff));     // Signal it to wake up one of the idle workers.
   else if (threadpool->nb_alive_workers < threadpool->requested_nb_workers)     // No workers are idle and available to process this new task at once:
@@ -604,7 +615,7 @@ threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void
 }
 
 size_t
-threadpool_add_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, void (*job_delete) (void *job, tp_result_t result))
+threadpool_add_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, tp_result_t (*job_delete) (void *job, tp_result_t result))
 {
   return threadpool_create_task (threadpool, work, job, job_delete, 0);
 }
@@ -620,6 +631,7 @@ threadpool_wait_and_destroy (struct threadpool *threadpool)
     thrd_honored (cnd_broadcast (&threadpool->proceed_or_conclude_or_runoff));  // broadcast it to unblock and finish all pending threads.
   while (!threadpool_runoff_predicate (threadpool))     // Wait for all tasks (either virtual or not) to be processed and all running workers to terminate properly.
     thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));
+  // TODO: remove continuators of the threadpool here ?
   threadpool_monitor_call (threadpool, 1);
   if (threadpool->monitor.processor)
     threadpool_wait_and_destroy (threadpool->monitor.processor);        // Barrier to wait for all monitoring processes to finish.
@@ -675,13 +687,10 @@ threadpool_cancel_task (struct threadpool *threadpool, size_t task_id)
       if (task_id == TP_CANCEL_NEXT_PENDING_TASK || e->task.id == task_id)
         break;
     }
-  if (ret)
-  {
-    threadpool->nb_canceled_tasks += ret;
-    assert (threadpool->nb_pending_tasks >= ret);
-    threadpool->nb_pending_tasks -= ret;
-    threadpool_monitor_call (threadpool, 0);
-  }
+  // Monitor immediately (without waiting for the task to be processed).
+  assert (threadpool->nb_pending_tasks >= ret);
+  threadpool->nb_pending_tasks -= ret;
+  threadpool->nb_canceled_tasks += ret;
   thrd_honored (mtx_unlock (&threadpool->mutex));
   return ret;
 }

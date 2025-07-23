@@ -63,20 +63,23 @@ struct aggregate
   unsigned int *init;
 };
 
-static void
-increment (void *a, void *job)
+static tp_result_t
+increment (void *aggregate, void *job)
 {
-  struct aggregate *c = a;
+  struct aggregate *c = aggregate;
   c->nb += 1;                   // Aggregator
   c->init = realloc (c->init, c->nb * sizeof (*c->init));
   c->init[c->nb - 1] = ((struct job *) job)->init;
+  if (c->nb == 2)
+    return TP_JOB_FAILURE;
+  return TP_JOB_SUCCESS;
 }
 
 // -----------------------------------------
 int
 main (void)
 {
-  struct job numbers[15];
+  struct job numbers[50];
   for (size_t i = 0; i < sizeof (numbers) / sizeof (*numbers); i++)
   {
     numbers[i].init = numbers[i].final = (unsigned int) rand ();
@@ -86,11 +89,11 @@ main (void)
   static unsigned int f_arg_1 = 10;
   static unsigned int f_arg_2 = 5;
   static struct mapper mappers[] = { {.f = adddigits}, {.f = multipleof,.arg = &f_arg_1}, {.f = adddigits}, {.f = equals,.arg = &f_arg_2}, };
-  struct aggregate counter = { 0 };  // Initialise aggreagte
+  struct aggregate counter = { 0 };     // Initialise aggreagte
   struct stream stream = {.nb_mappers = sizeof (mappers) / sizeof (*mappers),.mappers = mappers,        // Mappers and filters
     .reducer = {.aggregate = &counter,.aggregator = increment}, // Reducer
   };
-  struct threadpool *threadpool = threadpool_create_and_start_stream (TP_WORKER_NB_CPU, &stream, TP_RUN_ALL_TASKS);
+  struct threadpool *threadpool = threadpool_create_and_start_stream (TP_WORKER_NB_CPU /*TP_WORKER_SEQUENTIAL */ , &stream);
   threadpool_set_monitor (threadpool, threadpool_monitor_to_terminal, 0, 0);
   for (size_t i = 0; i < sizeof (numbers) / sizeof (*numbers); i++)
     threadpool_add_task_to_stream (threadpool, numbers + i);

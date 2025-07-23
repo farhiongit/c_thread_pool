@@ -11,7 +11,7 @@
 #include "timer.h"
 #include "wqm.h"
 
-static const size_t NB_TIMERS = 2000;
+static const size_t NB_TIMERS = 4000;
 static const double MAXDELAY = 2.;
 static const double TIMEOUT = 0.7 * MAXDELAY;   // Timeout (seconds) (shortened a little bit, for the purpose of the example.)
 static size_t Nb_timers_done = 0;

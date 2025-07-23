@@ -119,9 +119,9 @@ main ()
   clock_gettime (CLOCK_MONOTONIC, &ts);
   srandom ((unsigned int) ts.tv_nsec);
 #else
-  fprintf (stdout, _(" [Reproductible]\n"));
+  fprintf (stdout, _(" [Reproducible]\n"));
 #endif
-  fprintf (stdout, _("Initializing %'zu random numbers...\n"), (size_t) (TIMES * SIZE));
+  fprintf (stdout, _("Initialising %'zu random numbers...\n"), (size_t) (TIMES * SIZE));
   for (size_t i = 0; i < (size_t) TIMES; i++)
     for (size_t j = 0; j < (size_t) SIZE; j++)
       base[i * (size_t) SIZE + j] = ((1LL << 31) * random () + random ()) % (1LL << i);
@@ -146,22 +146,22 @@ main ()
   for (; i < (size_t) TIMES; i++)
     task_id = threadpool_add_task (tp, worker, base + (i * ((size_t) SIZE)), 0);        // Parallel work
   sleep (1);
-  fprintf (stdout, _("Canceling the last submitted task (twice).\n"));
+  fprintf (stdout, _("Cancelling the last submitted task (twice).\n"));
   threadpool_cancel_task (tp, task_id);
   threadpool_cancel_task (tp, task_id);
   fprintf (stdout, _("Add and cancel void task (twice).\n"));
   threadpool_add_task (tp, 0, 0, 0);
   threadpool_add_task (tp, 0, malloc (1), threadpool_job_free_handler);
   sleep (1);
-  fprintf (stdout, _("Canceling two tasks (last submitted and pending).\n"));
+  fprintf (stdout, _("Cancelling two tasks (last submitted and pending).\n"));
   threadpool_cancel_task (tp, TP_CANCEL_LAST_PENDING_TASK);
   threadpool_cancel_task (tp, TP_CANCEL_LAST_PENDING_TASK);
   sleep (1);
-  fprintf (stdout, _("Canceling two tasks (first submitted and pending).\n"));
+  fprintf (stdout, _("Cancelling two tasks (first submitted and pending).\n"));
   threadpool_cancel_task (tp, TP_CANCEL_NEXT_PENDING_TASK);
   threadpool_cancel_task (tp, TP_CANCEL_NEXT_PENDING_TASK);
   sleep (1);
-  fprintf (stdout, _("Canceling all pending tasks.\n"));
+  fprintf (stdout, _("Cancelling all pending tasks.\n"));
   threadpool_cancel_task (tp, TP_CANCEL_ALL_PENDING_TASKS);
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, _("Done.\n"));

@@ -47,10 +47,10 @@ extern const tp_result_t TP_JOB_CANCELED;
 // Returns 0 on error, a unique id of the submitted task otherwise.
 // Set errno to ENOMEM on error (out of memory).
 typedef size_t tp_task_t;
-tp_task_t threadpool_add_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, void (*job_delete) (void *job, tp_result_t result));
+tp_task_t threadpool_add_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, tp_result_t (*job_delete) (void *job, tp_result_t result));
 
-// A handler is provided for convenience. It calls 'free' on 'job', whatever the value of 'result'.
-void threadpool_job_free_handler (void *job, tp_result_t result);
+// A handler is provided for convenience. It calls 'free' on 'job', whatever the value of 'result', and returns 'result'.
+tp_result_t threadpool_job_free_handler (void *job, tp_result_t result);
 
 // ** Options for 'threadpool_add_job' **
 // Call to 'job_delete' is MT-safe and, if not null, is done once per job (no less no more) right after the job has been completed by 'worker'.
