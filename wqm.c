@@ -143,34 +143,20 @@ static struct
 } Continuators = { 0 };
 
 static void
-continuators_clear_on_exit (void)
+continuators_init (void)
 {
-  if (Continuators.map)
-    map_traverse (Continuators.map, MAP_REMOVE_ALL, free, 0, 0);
-}
-
-static int
-threadpool_task_continuator_timeout_operator (void *data, void *res, int *remove)
-{
-  (void) res;
-  struct continuator_data *continuator = data;
-  continuator->threadpool->nb_failed_tasks++;
-  if (continuator->job.data_delete)     // The job won't be processed : delete it and discard its returned value.
-    continuator->job.data_delete (continuator->job.data, TP_JOB_FAILURE);
-  assert (continuator->threadpool->nb_async_tasks--);   // The predicate threadpool_is_done_predicate is modified: broadcast.
-  // Do not broadcast before the continuator is thrown away.
-  thrd_honored (cnd_broadcast (&continuator->threadpool->proceed_or_conclude_or_runoff));
-  free (continuator);           // Remove the continuator.
-  *remove = 1;                  // Remove the continuator fom the map.
-  return 0;
+  if (!Continuators.map && !(Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1))) // Sorted map.
+    fprintf (stderr, "%s: %s\n", __func__, _("Out of memory. Virtual tasks not managed."));
 }
 
 static void
-threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler (the response of the virtual task arrives too late)
+continuators_clear_on_exit (void)
 {
   if (!Continuators.map)
     return;
-  map_find_key (Continuators.map, p_uid, threadpool_task_continuator_timeout_operator, 0);
+  map_traverse (Continuators.map, MAP_REMOVE_ALL, free, 0, 0);
+  map_destroy (Continuators.map);
+  Continuators.map = 0;
 }
 
 static size_t threadpool_create_task (struct threadpool *threadpool, tp_result_t (*work) (void *job), void *job, tp_result_t (*job_delete) (void *job, tp_result_t result),
@@ -181,12 +167,12 @@ threadpool_task_continuator_continue_operator (void *data, void *res, int *remov
 {
   (void) res;
   struct continuator_data *continuator = data;
-  if (!threadpool_create_task (continuator->threadpool, continuator->work, continuator->job.data, continuator->job.data_delete, /* is_continuation = */ 1))
+  if (!threadpool_create_task (continuator->threadpool, (res ? continuator->work /* finalise */ : 0 /* timeout: cancel */ ),
+                               continuator->job.data, continuator->job.data_delete, /* is_continuation = */ 1))
   {
     fprintf (stderr, "%s: %s\n", __func__, _("Continuation failed."));
     continuator->threadpool->nb_failed_tasks++;
-    if (continuator->job.data_delete)   // The job won't be processed : delete it.
-      continuator->job.data_delete (continuator->job.data, TP_JOB_FAILURE);
+    return 0;
   }
   // Remove the asynchronous task (after the continuator has been converted into a task to keep threadpool_is_done_predicate true).
   assert (continuator->threadpool->nb_async_tasks--);
@@ -199,10 +185,18 @@ threadpool_task_continuator_continue_operator (void *data, void *res, int *remov
   return 0;
 }
 
+static void
+threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler (the response of the virtual task arrives too late)
+{
+  if (!Continuators.map)
+    return;
+  map_find_key (Continuators.map, p_uid, threadpool_task_continuator_continue_operator, 0);
+}
+
 tp_result_t
 threadpool_task_continue (uint64_t uid)
 {
-  if (!Continuators.map || !map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, 0))
+  if (!Continuators.map || !map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, &uid))
   {
     errno = ETIMEDOUT;
     return TP_JOB_FAILURE;
@@ -383,17 +377,13 @@ threadpool_monitor_every_100ms (struct threadpool_monitor d)
 static void
 threadpool_clear_on_exit (void)
 {
-  if (!Continuators.map)
-    return;
   continuators_clear_on_exit ();
-  map_destroy (Continuators.map);
 }
 
 static void
 threadpool_init (void)          // Called once.
 {
-  if (!(Continuators.map = map_create (continuator_data_get_key, continuator_data_cmp_key, 0, 1)))      // Sorted map.
-    fprintf (stderr, "%s: %s\n", __func__, _("Out of memory. Virtual tasks not managed."));
+  continuators_init ();
   atexit (threadpool_clear_on_exit);
 }
 
@@ -504,19 +494,12 @@ thread_worker_runner (void *args)
         ret = old_elem->task.job.data_delete (old_elem->task.job.data, ret);    // Note (*): get rid of job after use (and if it is not scheduled in a continuation).
       if (old_elem->task.work && !old_elem->task.to_be_continued)       // For a continuation task, we have to wait for the continuation before we know the final result.
       {
-        switch (ret)
-        {
-          case TP_JOB_FAILURE:
-            threadpool->nb_failed_tasks++;
-            break;
-          case TP_JOB_SUCCESS:
-            threadpool->nb_succeeded_tasks++;
-            break;
-          case TP_JOB_CANCELED:
-            threadpool->nb_canceled_tasks++;
-            break;
-          default:
-        }
+        if (ret == TP_JOB_FAILURE)
+          threadpool->nb_failed_tasks++;
+        else if (ret == TP_JOB_SUCCESS)
+          threadpool->nb_succeeded_tasks++;
+        else if (ret == TP_JOB_CANCELED)
+          threadpool->nb_canceled_tasks++;
         if ((threadpool->property == TP_RUN_ALL_SUCCESSFUL_TASKS && ret == TP_JOB_FAILURE) || (threadpool->property == TP_RUN_ONE_SUCCESSFUL_TASK && ret == TP_JOB_SUCCESS))
           threadpool_cancel_task (threadpool, TP_CANCEL_ALL_PENDING_TASKS);     // Cancel automatically other already submitted tasks (threadpool->mutex is mtx_recursive)
       }
@@ -631,7 +614,6 @@ threadpool_wait_and_destroy (struct threadpool *threadpool)
     thrd_honored (cnd_broadcast (&threadpool->proceed_or_conclude_or_runoff));  // broadcast it to unblock and finish all pending threads.
   while (!threadpool_runoff_predicate (threadpool))     // Wait for all tasks (either virtual or not) to be processed and all running workers to terminate properly.
     thrd_honored (cnd_wait (&threadpool->proceed_or_conclude_or_runoff, &threadpool->mutex));
-  // TODO: remove continuators of the threadpool here ?
   threadpool_monitor_call (threadpool, 1);
   if (threadpool->monitor.processor)
     threadpool_wait_and_destroy (threadpool->monitor.processor);        // Barrier to wait for all monitoring processes to finish.

@@ -56,6 +56,17 @@ resume (void *)
   return EXIT_SUCCESS;
 }
 
+static tp_result_t
+done (void *, tp_result_t res)
+{
+  if (res == TP_JOB_SUCCESS)
+  {
+    size_t *counter = threadpool_global_data ();
+    *counter += 1;
+  }
+  return res;
+}
+
 static int
 wait (void *)
 {
@@ -70,7 +81,7 @@ monitor_handler (struct threadpool_monitor d, void *)
 {
   fprintf (stdout, "t=%6.2fs: %'zu active worker, %'zu processing virtual tasks, "
            "%'zu virtual tasks have succeeded, %'zu will definitely be out of time (over %'zu submitted).\n",
-           d.time, d.workers.nb_alive, d.tasks.nb_asynchronous, d.tasks.nb_succeeded, d.tasks.nb_failed, d.tasks.nb_submitted);
+           d.time, d.workers.nb_alive, d.tasks.nb_asynchronous, d.tasks.nb_succeeded, d.tasks.nb_failed + d.tasks.nb_canceled, d.tasks.nb_submitted);
   fflush (stdout);
 }
 
@@ -82,11 +93,12 @@ main (void)
   fprintf (stdout, "Creating the thread pool...\n");
   struct timespec t0;
   timespec_get (&t0, TIME_UTC);
-  struct threadpool *tp = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, 0, TP_RUN_ALL_TASKS);
+  size_t counter = 0;
+  struct threadpool *tp = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, &counter, TP_RUN_ALL_TASKS);
   threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
   fprintf (stdout, "Submiting virtual tasks...\n");
   for (size_t i = 0; i < NB_TIMERS; i++)
-    threadpool_add_task (tp, wait, 0, 0);
+    threadpool_add_task (tp, wait, 0, done);
   fprintf (stdout, "Waiting for the threads to end...\n");
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, "The thread pool has been destroyed.\n");
@@ -102,5 +114,6 @@ main (void)
       break;
     nanosleep (&duration, 0);
   }
+  fprintf (stdout, "%zu virtual tasks have succeeded.\n", counter);
   fprintf (stdout, "=======\n");
 }
