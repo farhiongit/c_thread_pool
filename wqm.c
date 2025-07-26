@@ -165,7 +165,6 @@ static size_t threadpool_create_task (struct threadpool *threadpool, tp_result_t
 static int
 threadpool_task_continuator_continue_operator (void *data, void *res, int *remove)
 {
-  (void) res;
   struct continuator_data *continuator = data;
   if (!threadpool_create_task (continuator->threadpool, (res ? continuator->work /* finalise */ : 0 /* timeout: cancel */ ),
                                continuator->job.data, continuator->job.data_delete, /* is_continuation = */ 1))

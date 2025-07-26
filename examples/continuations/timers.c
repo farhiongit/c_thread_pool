@@ -12,9 +12,12 @@
 #include "wqm.h"
 
 static const size_t NB_TIMERS = 4000;
-static const double MAXDELAY = 2.;
-static const double TIMEOUT = 0.7 * MAXDELAY;   // Timeout (seconds) (shortened a little bit, for the purpose of the example.)
+static const double MAXDELAY = 1.;
+static const double RATIO = 1. / 2.;    // Timeout ratio (shortened a little bit, for the purpose of the example.)
 static size_t Nb_timers_done = 0;
+static size_t Nb_timers_started = 0;
+typedef enum
+{ PHASE_I, PHASE_II } phase;
 
 struct async_task_wrapper
 {
@@ -49,21 +52,29 @@ timer_handler (void *arg)
   async_task_delete (task);
 }
 
+static int wait (void *);
 static int
-resume (void *)
+resume (void *j)
 {
   // Do whatever wanted here at asynchronous task termination;
-  return EXIT_SUCCESS;
+  if (*(phase *) j == PHASE_I)
+  {
+    *(phase *) j = PHASE_II;
+    return wait (j);
+  }
+  else
+    return EXIT_SUCCESS;
 }
 
 static tp_result_t
-done (void *, tp_result_t res)
+done (void *j, tp_result_t res)
 {
   if (res == TP_JOB_SUCCESS)
   {
     size_t *counter = threadpool_global_data ();
     *counter += 1;
   }
+  free (j);
   return res;
 }
 
@@ -71,8 +82,9 @@ static int
 wait (void *)
 {
   struct async_task_wrapper *task = async_task_create (1. * MAXDELAY * rand () / RAND_MAX);
-  assert ((task->uid = threadpool_task_continuation (resume, TIMEOUT)));        // Declare continuation (resume).
+  assert ((task->uid = threadpool_task_continuation (resume, RATIO * MAXDELAY)));       // Declare continuation (resume).
   task->timer = timer_set (task->end_time, timer_handler, task);        // Trigger continuation (timer_handler) after a delay.
+  Nb_timers_started++;
   return EXIT_SUCCESS;
 }
 
@@ -88,8 +100,8 @@ monitor_handler (struct threadpool_monitor d, void *)
 int
 main (void)
 {
-  fprintf (stdout, "Running %zu virtual tasks (asynchronous timers of at most %g seconds) on a single worker "
-           "(virtual tasks will time out after %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, 1. * TIMEOUT);
+  fprintf (stdout, "Running %zu virtual tasks (two consecutive asynchronous timers of at most %g seconds) on a single worker "
+           "(asynchronous calls will time out after %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, 1. * RATIO * MAXDELAY);
   fprintf (stdout, "Creating the thread pool...\n");
   struct timespec t0;
   timespec_get (&t0, TIME_UTC);
@@ -98,22 +110,26 @@ main (void)
   threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
   fprintf (stdout, "Submiting virtual tasks...\n");
   for (size_t i = 0; i < NB_TIMERS; i++)
-    threadpool_add_task (tp, wait, 0, done);
+  {
+    phase *j = malloc (sizeof (*j));
+    *j = PHASE_I;
+    threadpool_add_task (tp, wait, j, done);
+  }
   fprintf (stdout, "Waiting for the threads to end...\n");
   threadpool_wait_and_destroy (tp);
   fprintf (stdout, "The thread pool has been destroyed.\n");
-  fprintf (stdout, "Waiting for the remaining out of time, late, thus disregarded, virtual tasks to time out...\n");
+  fprintf (stdout, "%zu virtual tasks have succeeded (vs around %zu expected).\n", counter, (size_t) (RATIO * RATIO * (double) NB_TIMERS));
+  fprintf (stdout, "Waiting for the remaining out of time, late, thus disregarded, asynchronous calls to end...\n");
   static const struct timespec duration = { 0, 100000000 };     /* 100 ms */
-  while (Nb_timers_done <= NB_TIMERS)
+  while (Nb_timers_done <= Nb_timers_started)
   {
     struct timespec now;
     timespec_get (&now, TIME_UTC);
-    fprintf (stdout, "t=%6.2fs: %'zu virtual tasks have now finisihed.\n", difftime (now.tv_sec, t0.tv_sec) + 1e-9 * (double) (now.tv_nsec - t0.tv_nsec), Nb_timers_done);
+    fprintf (stdout, "t=%6.2fs: %'zu asynchronous calls have now finisihed.\n", difftime (now.tv_sec, t0.tv_sec) + 1e-9 * (double) (now.tv_nsec - t0.tv_nsec), Nb_timers_done);
     fflush (stdout);
-    if (Nb_timers_done >= NB_TIMERS)
+    if (Nb_timers_done == Nb_timers_started)
       break;
     nanosleep (&duration, 0);
   }
-  fprintf (stdout, "%zu virtual tasks have succeeded.\n", counter);
   fprintf (stdout, "=======\n");
 }
