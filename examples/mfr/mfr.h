@@ -15,12 +15,15 @@ struct stream
   struct reducer                // Reducer, called MT safely
   {
     void *aggregate;            // Result of the stream after aggregation
-      tp_result_t (*aggregator) (void *aggregate, void *job);   // Job aggregator, aggregate 'job' into 'aggregate'
+      tp_result_t (*aggregator) (void *aggregate, void *job);   // Job aggregator, aggregate 'job' into 'aggregate' (return either TP_JOB_CANCELED or TP_JOB_FAILURE to interrupt the threadpool.)
   } reducer;
-    tp_result_t (*job_deletor) (void *);        //  Job cleaner (after aggregation). Freeing job should be done here if necessary.
+  void (*deletor) (void *);     //  Job cleaner (after aggregation). Freeing job should be done here if necessary.
   int rejecting;                // Should be left unset to 0 at initialisation.
 };
 
+tp_result_t takewhile (void *job, void *arg);
+tp_result_t dropuntil (void *job, void *arg);
+tp_result_t rejectif (void *job, void *arg);
 tp_task_t threadpool_add_task_to_stream (struct threadpool *threadpool, void *job);
 struct threadpool *threadpool_create_and_start_stream (size_t nb_workers, struct stream *stream);
 

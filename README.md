@@ -201,6 +201,7 @@ The function `threadpool_add_task` returns a unique id of the submitted task, or
 (in a map and reduce pattern for instance). See [below](#multi-thread-safe-task-post-processing).
 
 > `job_delete` could as well be called manually (rather than passed as an argument to `threadpool_add_task`) at the very end of `work ()`, but it then would not be executed multi-thread-safely, forbidding any aggregation.
+> If a part of a task needs to be synchronised, `threadpool_guard_begin ()` and `threadpool_guard_end ()` could be used to guard some sections of the task. Nevertheless, these functions SHOULD generally NOT BE USED. Calls to `job_delete` are synchronised and should respond to ususal cases.
 
 - A handler is provided for convenience.
 ```c

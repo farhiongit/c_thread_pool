@@ -745,3 +745,17 @@ threadpool_set_worker_local_data_manager (struct threadpool *threadpool, void *(
   }
   thrd_honored (mtx_unlock (&threadpool->mutex));
 }
+
+void
+threadpool_guard_begin (void)
+{
+  if (Worker_context.threadpool && Worker_context.threadpool->requested_nb_workers > 1)
+    thrd_honored (mtx_lock (&Worker_context.threadpool->mutex));
+}
+
+void
+threadpool_guard_end (void)
+{
+  if (Worker_context.threadpool && Worker_context.threadpool->requested_nb_workers > 1)
+    thrd_honored (mtx_unlock (&Worker_context.threadpool->mutex));
+}

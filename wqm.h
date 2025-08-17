@@ -120,4 +120,8 @@ void threadpool_monitor (struct threadpool *threadpool);
 uint64_t threadpool_task_continuation (tp_result_t (*work) (void *data), double seconds);
 // Call the task continuation. Returns TP_JOB_SUCCESS if the continuator UID was previously declared and has not timed out, TP_JOB_FAILURE (with errno set to ETIMEDOUT) otherwise.
 tp_result_t threadpool_task_continue (uint64_t uid);
+
+// These functions SHOULD generally NOT BE USED. They permit to synchronise some sections of a task other than the termination of a task which is synchronised in job_delete.
+void threadpool_guard_begin (void);
+void threadpool_guard_end (void);
 #endif
