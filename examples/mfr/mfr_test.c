@@ -147,10 +147,11 @@ main (void)
   unsigned int f_arg_2 = 5;
   size_t drop = 13;
   size_t take = 2;
-  struct mapper mappers[] = { {.f = printjob},
+  struct mapper mappers[] = {
   {.f = iota},
   {.f = dropuntil,.arg = (void *[])
    {countuntil, &drop}},
+  {.f = printjob},
   {.f = adddigits},
   {.f = multipleof,.arg = &f_arg_1},
   {.f = adddigits},
