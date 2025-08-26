@@ -23,6 +23,7 @@ extern const tp_property_t TP_RUN_ALL_TASKS;    // Runs all submitted tasks.
 extern const tp_property_t TP_RUN_ALL_SUCCESSFUL_TASKS; // Runs submitted tasks until one fails. Cancel automatically other (already or to be) submitted tasks.
 extern const tp_property_t TP_RUN_ONE_SUCCESSFUL_TASK;  // Runs submitted tasks until one succeeds. Cancel automatically other (already or to be) submitted tasks.
 struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_data, tp_property_t property);
+size_t threadpool_nb_workers (struct threadpool *threadpool);
 
 // Returns the current thread pool.
 void *threadpool_current (void);

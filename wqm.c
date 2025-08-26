@@ -442,6 +442,12 @@ on_error:
   return 0;
 }
 
+size_t
+threadpool_nb_workers (struct threadpool *threadpool)
+{
+  return threadpool ? threadpool->requested_nb_workers : 0;
+}
+
 static int
 thread_worker_runner (void *args)
 {
