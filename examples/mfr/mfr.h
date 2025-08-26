@@ -23,7 +23,7 @@ struct stream
 
 tp_result_t takewhile (void *job, void *arg);
 tp_result_t dropuntil (void *job, void *arg);
-tp_result_t rejectif (void *job, void *arg);
+tp_result_t interrupt (void *job, void *arg);
 tp_task_t threadpool_add_task_to_stream (struct threadpool *threadpool, void *job);
 struct threadpool *threadpool_create_and_start_stream (size_t nb_workers, struct stream *stream);
 

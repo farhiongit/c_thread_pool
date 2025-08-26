@@ -96,10 +96,8 @@ make_job (void)
 static tp_result_t
 printjob (void *job, void *arg)
 {
-  (void) job;
-  (void) arg;
   struct job *j = job;
-  fprintf (stdout, "#%zu: %u (%u)\n", j->seq, j->init, itos (j->init));
+  fprintf (stdout, "#%zu: %u (%u) %s\n", j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
   return TP_JOB_SUCCESS;
 }
 
@@ -143,40 +141,44 @@ increment (void *aggregate, void *job)
 int
 main (void)
 {
-  unsigned int f_arg_1 = 10;
-  unsigned int f_arg_2 = 5;
-  size_t drop = 13;
-  size_t take = 2;
-  struct mapper mappers[] = {
-  {.f = iota},
-  {.f = dropuntil,.arg = (void *[])
-   {countuntil, &drop}},
-  {.f = printjob},
-  {.f = adddigits},
-  {.f = multipleof,.arg = &f_arg_1},
-  {.f = adddigits},
-  {.f = equals,.arg = &f_arg_2},
-  {.f = printjob},
-  {.f = takewhile,.arg = (void *[])
-   {countwhile, &take}},
-  {.f = rejectif,.arg = (void *[])
-   {isnull, &take}},
-  };
-  struct aggregate counter = { 0 };     // Initialise aggreagte
-  struct stream stream = {.nb_mappers = sizeof (mappers) / sizeof (*mappers),.mappers = mappers,        // Mappers and filters
-    .reducer = {.aggregate = &counter,.aggregator = increment}, // Reducer
-    .deletor = free,            // Destructor
-  };
-  //size_t nb_cpu = TP_WORKER_SEQUENTIAL;
-  size_t nb_cpu = TP_WORKER_NB_CPU;
-  struct threadpool *threadpool = threadpool_create_and_start_stream (nb_cpu, &stream);
-  //threadpool_set_monitor (threadpool, threadpool_monitor_to_terminal, 0, 0);
-  threadpool_add_task_to_stream (threadpool, make_job ());
-  threadpool_wait_and_destroy (threadpool);
-  fprintf (stdout, "%zu\n", counter.nb);
-  for (size_t i = 0; i < counter.nb; i++)
-    fprintf (stdout, "%u ; ", counter.init[i]);
-  fprintf (stdout, "\n");
-  // Freeing aggregate stream.reducer.aggregate should be done here if necessary.
-  free (counter.init);
+  const size_t CPU[] = { TP_WORKER_SEQUENTIAL, TP_WORKER_NB_CPU };
+  for (size_t j = 0; j < sizeof (CPU) / sizeof (*CPU); j++)
+  {
+    srand (0);
+    unsigned int f_arg_1 = 10;
+    unsigned int f_arg_2 = 5;
+    size_t drop = 13;
+    size_t take = 2;
+    struct mapper mappers[] = {
+      {.f = iota},
+      {.f = dropuntil,.arg = (void *[])
+       {countuntil, &drop}},
+      {.f = printjob},
+      {.f = adddigits},
+      {.f = multipleof,.arg = &f_arg_1},
+      {.f = adddigits},
+      {.f = equals,.arg = &f_arg_2},
+      {.f = printjob,.arg = "+"},
+      {.f = takewhile,.arg = (void *[])
+       {countwhile, &take}},
+      {.f = interrupt,.arg = (void *[])
+       {isnull, &take}},
+    };
+    struct aggregate counter = { 0 };   // Initialise aggreagte
+    struct stream stream = {.nb_mappers = sizeof (mappers) / sizeof (*mappers),.mappers = mappers,      // Mappers and filters
+      .reducer = {.aggregate = &counter,.aggregator = increment},       // Reducer
+      .deletor = free,          // Destructor
+    };
+    size_t nb_cpu = CPU[j];
+    struct threadpool *threadpool = threadpool_create_and_start_stream (nb_cpu, &stream);
+    fprintf (stdout, "===== %zu threads =====\n", threadpool_nb_workers (threadpool));
+    threadpool_add_task_to_stream (threadpool, make_job ());
+    threadpool_wait_and_destroy (threadpool);
+    fprintf (stdout, "%zu: ", counter.nb);
+    for (size_t i = 0; i < counter.nb; i++)
+      fprintf (stdout, "%u ; ", counter.init[i]);
+    fprintf (stdout, "\n");
+    // Freeing aggregate stream.reducer.aggregate should be done here if necessary.
+    free (counter.init);
+  }
 }

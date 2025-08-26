@@ -78,7 +78,7 @@ breakorcontinue (void *job, void *arg, tp_result_t res)
 
 // ------- User interface and helpers ------------
 tp_result_t
-rejectif (void *job, void *arg)
+interrupt (void *job, void *arg)
 {
   struct stream *stream = threadpool_global_data ();
   assert (stream);
