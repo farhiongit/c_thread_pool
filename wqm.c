@@ -62,7 +62,7 @@ struct threadpool
     void *(*make) (void);
     void (*destroy) (void *local_data);
   } worker_local_data_manager;
-  size_t nb_alive_workers, nb_idle_workers;
+  size_t nb_alive_workers, nb_idle_workers, nb_created_workers;
   size_t atomic nb_created_tasks, nb_submitted_tasks, nb_pending_tasks, nb_async_tasks, nb_processing_tasks, nb_succeeded_tasks, nb_failed_tasks, nb_canceled_tasks;
   thrd_t **active_worker_id /* [requested_nb_workers] */ ;
   struct elem                   // Elements in FIFO.
@@ -107,6 +107,7 @@ static thread_local struct      // Thread local worker-specific storage (see als
   struct threadpool *threadpool;        // thread pool in which a worker is running
   void *local_data;
   struct task *current_task;
+  size_t worker_no;
 } Worker_context = { 0 };
 
 static once_flag THREADPOOL_INIT = ONCE_FLAG_INIT;
@@ -414,7 +415,7 @@ threadpool_create_and_start (size_t nb_workers, void *global_data, tp_property_t
   threadpool->worker_local_data_manager.destroy = 0;
   threadpool->in = threadpool->out = 0;
   threadpool->concluding = 0;
-  threadpool->max_nb_workers = threadpool->nb_alive_workers = threadpool->nb_idle_workers = 0;
+  threadpool->max_nb_workers = threadpool->nb_alive_workers = threadpool->nb_idle_workers = threadpool->nb_created_workers = 0;
   threadpool->nb_created_tasks = threadpool->nb_processing_tasks = threadpool->nb_succeeded_tasks =
     threadpool->nb_async_tasks = threadpool->nb_failed_tasks = threadpool->nb_pending_tasks = threadpool->nb_submitted_tasks = threadpool->nb_canceled_tasks = 0;
   threadpool->idle_timeout = 0.1;       // seconds.
@@ -455,6 +456,7 @@ thread_worker_runner (void *args)
   struct threadpool *threadpool = args;
   Worker_context.threadpool = threadpool;       // Thread local variable
   thrd_honored (mtx_lock (&threadpool->mutex));
+  Worker_context.worker_no = ++threadpool->nb_created_workers;
   Worker_context.local_data = threadpool->worker_local_data_manager.make ? threadpool->worker_local_data_manager.make () : 0;   // Call to threadpool->worker_local_data.make is thread-safe.
   while (1)                     // Looping on tasks (concurrently with other workers)
   {
@@ -728,10 +730,13 @@ threadpool_global_resource (void)
 struct threadpool *
 threadpool_current (void)
 {
-  if (Worker_context.threadpool)
-    return Worker_context.threadpool;
-  else
-    return 0;
+  return Worker_context.threadpool;
+}
+
+size_t
+threadpool_current_worker_no (void)
+{
+  return Worker_context.worker_no;
 }
 
 void

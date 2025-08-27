@@ -27,6 +27,8 @@ size_t threadpool_nb_workers (struct threadpool *threadpool);
 
 // Returns the current thread pool.
 struct threadpool *threadpool_current (void);
+size_t threadpool_current_worker_no (void);
+
 
 // Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);

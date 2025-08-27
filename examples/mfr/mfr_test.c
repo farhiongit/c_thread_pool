@@ -98,7 +98,7 @@ static tp_result_t
 printjob (void *job, void *arg)
 {
   struct job *j = job;
-  fprintf (stdout, "[thread %lX] #%02zu: %010u (%02u) %s\n", (long unsigned int) thrd_current (), j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
+  fprintf (stdout, "[thread %zu] #%02zu: %010u (%02u) %s\n", threadpool_current_worker_no (), j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
   return TP_JOB_SUCCESS;
 }
 

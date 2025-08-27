@@ -90,8 +90,9 @@ Those features are detailed below.
 
 | Function | Description |
 | - | - |
-| `threadpool_nb_workers` | Get the number of requested workers in a threadpool |
+| `threadpool_nb_workers` | Gets the number of requested workers in a threadpool |
 | `threadpool_current` | Gives access to the current threadpool |
+| `threadpool_current_worker_no` | Gets the current worker sequence number |
 | `threadpool_cancel_task` | Cancels either all pending tasks, or the last, or the next submitted task, or a specific task |
 | `threadpool_set_monitor` | Sets a user-defined function to retrieve and display monitoring information of the thread pool activity |
 | `threadpool_set_idle_timeout` | Modifies the idle time out (default is 0.1 s) before an idle worker terminates |
