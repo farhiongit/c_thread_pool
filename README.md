@@ -152,6 +152,12 @@ The third argument is either :
 - `TP_RUN_ALL_SUCCESSFUL_TASKS` : Run submitted tasks until at least one fails (returns `TP_JOB_FAILURE`). Cancel automatically other (already or to be) submitted tasks.
 - `TP_RUN_ONE_SUCCESSFUL_TASK` : Run submitted tasks until at least one succeeds (returns `TP_JOB_SUCCESS`). Cancel automatically other (already or to be) submitted tasks.
 
+###### Options
+
+- The second argument `global_data`, if not null, is a pointer to global data.
+  This pointer can next be retrieved by tasks with the function `threadpool_global_data ()`.
+
+
 ###### Get the current thread pool
 
 The current thread pool can further be retrieved in a working context,
@@ -162,10 +168,11 @@ with:
 threadpool_current (void)
 ```
 
-###### Options
+###### Get the number of requested workers in a threadpool
 
-- The second argument `global_data`, if not null, is a pointer to global data.
-  This pointer can next be retrieved by tasks with the function `threadpool_global_data ()`.
+```c
+size_t threadpool_nb_workers (struct threadpool *threadpool)
+```
 
 ### Submit a task
 

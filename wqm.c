@@ -445,7 +445,7 @@ on_error:
 size_t
 threadpool_nb_workers (struct threadpool *threadpool)
 {
-  return threadpool ? threadpool->requested_nb_workers : 0;
+  return threadpool->requested_nb_workers;
 }
 
 static int
