@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <wchar.h>
 #include <stdlib.h>
+#include <threads.h>
 
 // ----------------- User defines stream ----------
 // Job
@@ -97,7 +98,7 @@ static tp_result_t
 printjob (void *job, void *arg)
 {
   struct job *j = job;
-  fprintf (stdout, "#%zu: %u (%u) %s\n", j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
+  fprintf (stdout, "[thread %lX] #%02zu: %010u (%02u) %s\n", (long unsigned int) thrd_current (), j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
   return TP_JOB_SUCCESS;
 }
 
