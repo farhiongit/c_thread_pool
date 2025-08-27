@@ -16,43 +16,16 @@ Create a static and dynamic library using :
 
 ```
 $ make libs
-cc -O -fPIC   -c -o wqm.o wqm.c
+cc -O -fPIC -std=c11 -I. -I../minimaps -c -o wqm.o wqm.c
 ar rcs libwqm.a wqm.o
-libwqm.a:wqm.o:0000000000000b0c T threadpool_add_task
-libwqm.a:wqm.o:000000000000183c T threadpool_cancel_task
-libwqm.a:wqm.o:00000000000007f9 T threadpool_create_and_start
-libwqm.a:wqm.o:0000000000002501 T threadpool_current
-libwqm.a:wqm.o:0000000000001813 T threadpool_global_data
-libwqm.a:wqm.o:00000000000024d5 T threadpool_global_resource
-libwqm.a:wqm.o:00000000000000cc T threadpool_job_free_handler
-libwqm.a:wqm.o:000000000000144d T threadpool_monitor
-libwqm.a:wqm.o:0000000000000762 T threadpool_monitor_every_100ms
-libwqm.a:wqm.o:00000000000004f7 T threadpool_monitor_to_terminal
-libwqm.a:wqm.o:0000000000002390 T threadpool_set_global_resource_manager
-libwqm.a:wqm.o:00000000000022a1 T threadpool_set_idle_timeout
-libwqm.a:wqm.o:000000000000146f T threadpool_set_monitor
-libwqm.a:wqm.o:0000000000002521 T threadpool_set_worker_local_data_manager
-libwqm.a:wqm.o:00000000000002cb T threadpool_task_continuation
-libwqm.a:wqm.o:000000000000027f T threadpool_task_continue
-libwqm.a:wqm.o:0000000000001595 T threadpool_wait_and_destroy
-libwqm.a:wqm.o:00000000000017f3 T threadpool_worker_local_data
-libwqm.a:wqm.o:0000000000000238 R TP_CANCEL_ALL_PENDING_TASKS
-libwqm.a:wqm.o:0000000000000228 R TP_CANCEL_LAST_PENDING_TASK
-libwqm.a:wqm.o:0000000000000230 R TP_CANCEL_NEXT_PENDING_TASK
-libwqm.a:wqm.o:0000000000000210 R TP_JOB_CANCELED
-libwqm.a:wqm.o:0000000000000214 R TP_JOB_FAILURE
-libwqm.a:wqm.o:0000000000000218 R TP_JOB_SUCCESS
-libwqm.a:wqm.o:0000000000000220 R TP_RUN_ALL_SUCCESSFUL_TASKS
-libwqm.a:wqm.o:0000000000000224 R TP_RUN_ALL_TASKS
-libwqm.a:wqm.o:000000000000021c R TP_RUN_ONE_SUCCESSFUL_TASK
-libwqm.a:wqm.o:0000000000000248 R TP_WORKER_NB_CPU
-libwqm.a:wqm.o:0000000000000240 R TP_WORKER_SEQUENTIAL
 cc -shared -o libwqm.so wqm.o
 ```
 
 | Static library | Dynamic library |
 |- | - |
 | `libwqm.a` | `libwqm.so` |
+
+It requires `libmap` and `libtimer` implemented in [minimaps](https://github.com/farhiongit/minimaps).
 
 ## Application programming Interface
 
@@ -117,6 +90,7 @@ Those features are detailed below.
 
 | Function | Description |
 | - | - |
+| `threadpool_nb_workers` | Get the number of requested workers in a threadpool |
 | `threadpool_current` | Gives access to the current threadpool |
 | `threadpool_cancel_task` | Cancels either all pending tasks, or the last, or the next submitted task, or a specific task |
 | `threadpool_set_monitor` | Sets a user-defined function to retrieve and display monitoring information of the thread pool activity |
@@ -165,7 +139,7 @@ inside user-defined functions `work` and `job_delete` (as passed to `threadpool_
 with:
 
 ```c
-threadpool_current (void)
+struct threadpool *threadpool_current (void)
 ```
 
 ###### Get the number of requested workers in a threadpool

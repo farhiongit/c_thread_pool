@@ -725,7 +725,7 @@ threadpool_global_resource (void)
     return 0;
 }
 
-void *
+struct threadpool *
 threadpool_current (void)
 {
   if (Worker_context.threadpool)

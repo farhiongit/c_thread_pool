@@ -26,7 +26,7 @@ struct threadpool *threadpool_create_and_start (size_t nb_workers, void *global_
 size_t threadpool_nb_workers (struct threadpool *threadpool);
 
 // Returns the current thread pool.
-void *threadpool_current (void);
+struct threadpool *threadpool_current (void);
 
 // Global data pointed to by 'global_data' will be accessible through a call to 'threadpool_global_data'.
 void *threadpool_global_data (void);
