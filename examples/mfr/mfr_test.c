@@ -98,7 +98,7 @@ static tp_result_t
 printjob (void *job, void *arg)
 {
   struct job *j = job;
-  fprintf (stdout, "[thread %zu] #%02zu: %010u (%02u) %s\n", threadpool_current_worker_no (), j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
+  fprintf (stdout, "[worker %zu] #%02zu: %010u (%02u) %s\n", threadpool_current_worker_no (), j->seq, j->init, itos (j->init), arg ? (char *) arg : "");
   return TP_JOB_SUCCESS;
 }
 
@@ -172,7 +172,7 @@ main (void)
     };
     size_t nb_cpu = CPU[j];
     struct threadpool *threadpool = threadpool_create_and_start_stream (nb_cpu, &stream);
-    fprintf (stdout, "===== %zu threads =====\n", threadpool_nb_workers (threadpool));
+    fprintf (stdout, "===== %zu workers =====\n", threadpool_nb_workers (threadpool));
     threadpool_add_task_to_stream (threadpool, make_job ());
     threadpool_wait_and_destroy (threadpool);
     fprintf (stdout, "%zu: ", counter.nb);
