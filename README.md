@@ -149,6 +149,18 @@ struct threadpool *threadpool_current (void)
 size_t threadpool_nb_workers (struct threadpool *threadpool)
 ```
 
+###### Get the unique identifier of a worker
+
+Each worker created by the thread pool is given a unique and constant number, that can be retrieved and used in a working context (mostly for tracing purposes).
+inside user-defined functions `work` and `job_delete` (as passed to `threadpool_add_task`) and `work` (as passed to `threadpool_task_continuation`),
+with:
+
+```c
+size_t threadpool_current_worker_no (void)
+```
+
+This number is increment by one for every new created worker.
+
 ### Submit a task
 
 ```c

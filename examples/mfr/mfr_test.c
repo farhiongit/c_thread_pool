@@ -12,7 +12,6 @@
 #include <assert.h>
 #include <wchar.h>
 #include <stdlib.h>
-#include <threads.h>
 
 // ----------------- User defines stream ----------
 // Job
