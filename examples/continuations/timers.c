@@ -12,10 +12,10 @@
 #include "wqm.h"
 
 static const size_t NB_TIMERS = 4000;
-static const double MAXDELAY = 1.;
-static const double RATIO = 1. / 2.;    // Timeout ratio (shortened a little bit, for the purpose of the example.)
-static size_t Nb_timers_done = 0;
-static size_t Nb_timers_started = 0;
+static const double MAXDELAY = 1.;      // Seconds.
+static const double RATIO = .4; // Timeout ratio (< 1, for the purpose of the example.)
+static _Atomic size_t Nb_timers_done = 0;
+static _Atomic size_t Nb_timers_started = 0;
 typedef enum
 { PHASE_I, PHASE_II } phase;
 
@@ -48,7 +48,7 @@ timer_handler (void *arg)
   errno = 0;
   Nb_timers_done++;
   struct async_task_wrapper *task = arg;
-  assert (threadpool_task_continue (task->uid) == EXIT_SUCCESS || errno == ETIMEDOUT);  // Trigger continuation.
+  assert (threadpool_task_continue (task->uid) == EXIT_SUCCESS || errno == ETIMEDOUT);  // Calls the continuation (resume) declared in wait.
   async_task_delete (task);
 }
 
@@ -60,7 +60,7 @@ resume (void *j)
   if (*(phase *) j == PHASE_I)
   {
     *(phase *) j = PHASE_II;
-    return wait (j);
+    return wait (j);            // Phase II: the task continuation starts a new consecutive asynchronous call in a row.
   }
   else
     return EXIT_SUCCESS;
@@ -81,9 +81,9 @@ done (void *j, tp_result_t res)
 static int
 wait (void *)
 {
-  struct async_task_wrapper *task = async_task_create (1. * MAXDELAY * rand () / RAND_MAX);
-  assert ((task->uid = threadpool_task_continuation (resume, RATIO * MAXDELAY)));       // Declare continuation (resume).
-  task->timer = timer_set (task->end_time, timer_handler, task);        // Trigger continuation (timer_handler) after a delay.
+  struct async_task_wrapper *task = async_task_create (1. * MAXDELAY * rand () / RAND_MAX);     // Declares an asynchronous call.
+  assert ((task->uid = threadpool_task_continuation (resume, RATIO * MAXDELAY)));       // Declares a continuation (resume) with time-out.
+  task->timer = timer_set (task->end_time, timer_handler, task);        // This is the asynchronous call (a timer is used as an example). Will trigger continuation at termination, when the callback is called (timer_handler, at task->end_time, after a delay).
   Nb_timers_started++;
   return EXIT_SUCCESS;
 }
@@ -100,20 +100,27 @@ monitor_handler (struct threadpool_monitor d, void *)
 int
 main (void)
 {
-  fprintf (stdout, "Running %zu virtual tasks (two consecutive asynchronous timers of at most %g seconds) on a single worker "
-           "(asynchronous calls will time out after %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, 1. * RATIO * MAXDELAY);
-  fprintf (stdout, "Creating the thread pool...\n");
+  srand ((unsigned int) time (0));
+  assert (RATIO >= 0. && RATIO <= 1.);
   struct timespec t0;
   timespec_get (&t0, TIME_UTC);
   size_t counter = 0;
-  struct threadpool *tp = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, &counter, TP_RUN_ALL_TASKS);
+  fprintf (stdout, "Creating the thread pool...\n");
+  struct threadpool *tp = threadpool_create_and_start (TP_WORKER_SEQUENTIAL, &counter, TP_RUN_ALL_TASKS);       // One single worker will handle all the asynchronous calls.
+  fprintf (stdout, "Running %zu virtual tasks (each task will run two consecutive asynchronous timers of at most %g seconds) on a %zu worker(s) "
+           "(asynchronous calls will time out after %g seconds).\n", NB_TIMERS, 1. * MAXDELAY, threadpool_nb_workers (tp), 1. * RATIO * MAXDELAY);
+  fprintf (stdout, " - %zu (phase I) then about %zu (phase II) asynchronous calls will be started.\n", NB_TIMERS, (size_t) (RATIO * (double) NB_TIMERS));
+  fprintf (stdout, "   - Phase I : About %zu asynchronous calls will fall short due to time-out of the continuation.\n", (size_t) ((1. - RATIO) * (double) NB_TIMERS));
+  fprintf (stdout, "   - Phase II : Then about %zu asynchronous calls will fall short due to time-out of the continuation.\n",
+           (size_t) ((1. - RATIO) * RATIO * (double) NB_TIMERS));
+  fprintf (stdout, "About %zu virtual tasks should succeed.\n", (size_t) (RATIO * RATIO * (double) NB_TIMERS));
   threadpool_set_monitor (tp, monitor_handler, 0, threadpool_monitor_every_100ms);
-  fprintf (stdout, "Submiting virtual tasks...\n");
+  fprintf (stdout, "Submiting %zu virtual tasks...\n", NB_TIMERS);
   for (size_t i = 0; i < NB_TIMERS; i++)
   {
     phase *j = malloc (sizeof (*j));
     *j = PHASE_I;
-    threadpool_add_task (tp, wait, j, done);
+    threadpool_add_task (tp, wait, j, done);    // Phase I: starts an asynchronous call.
   }
   fprintf (stdout, "Waiting for the threads to end...\n");
   threadpool_wait_and_destroy (tp);
