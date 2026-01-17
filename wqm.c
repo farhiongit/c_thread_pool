@@ -190,13 +190,13 @@ threadpool_task_continuation_timeout_handler (void *p_uid)      // timer handler
 {
   if (!Continuators.map)
     return;
-  map_find_key (Continuators.map, p_uid, threadpool_task_continuator_continue_operator, 0);
+  map_find_key (Continuators.map, p_uid, threadpool_task_continuator_continue_operator, 0, 0, 0);
 }
 
 tp_result_t
 threadpool_task_continue (uint64_t uid)
 {
-  if (!Continuators.map || !map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, &uid))
+  if (!Continuators.map || !map_find_key (Continuators.map, &uid, threadpool_task_continuator_continue_operator, &uid, 0, 0))
   {
     errno = ETIMEDOUT;
     return TP_JOB_FAILURE;
