@@ -130,7 +130,7 @@ continuator_data_get_key (void *pa)
 }
 
 static int
-continuator_data_cmp_key (const void *pa, const void *pb, void *arg)
+continuator_data_cmp_key (const void *pa, const void *pb, const void *arg)
 {
   (void) arg;
   const uint64_t *a = pa;
