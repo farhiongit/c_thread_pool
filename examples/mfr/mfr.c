@@ -1,8 +1,8 @@
 // Map, filter, reduce pattern parallelised by a thread pool.
 // (c) L. Farhi, 2025
+#undef NDEBUG
 #include "wqm.h"
 #include "mfr.h"
-#undef NDEBUG
 #include <assert.h>
 
 // ------- Map, filter, reduce pattern framework ------------

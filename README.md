@@ -1,8 +1,31 @@
 # Another simple, easy to use, effective but fully featured thread pool API for C language
 
-> This API implements a task parallelization mechanism based on the thread pool pattern.
+> This API implements a task parallelisation mechanism based on the thread pool pattern.
 
 ![Image of the Giola Lagoon in Thassos](ocean-pool-Giola-Lagoon.jpg "A beautiful, fully featured sea pool")
+
+## Unique features
+
+This C standard implementation of a thread pool brings unique features:
+
+1. **Standard C:** It uses the standard (minimalist) C11 thread library <threads.h> (§7.28 of ISO/IEC C programming language), rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
+1. **Data management:** The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely at completion of the task (via the user-defined function `job_delete ()`), allowing collecting data at task termination.
+1. **Global data management:** Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
+1. **Worker local data management:** Local data can be defined  (via `threadpool_set_worker_local_data_manager ()`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
+1. **Resource management:** Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager ()`) and accessed (via `threadpool_global_resource ()`) for the thread pool.
+1. **Worker life-time management:** Idle workers can be kept alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still running and could therefore create new tasks dynamically.
+1. **Monitoring facility:** The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
+1. **Task cancellation:** Pending tasks can be cancelled after submission (via `threadpool_cancel_task ()`).
+1. **Virtual tasks:** The thread pool can wait for asynchronous calls without blocking workers (via `threadpool_task_continuation ()` and `threadpool_task_continue ()`).
+
+Those features are detailed below.
+
+## Examples of applications
+
+Afterwards, a pool of threads can for instance easily be applied to:
+
+- [Multi-threaded quick sort in place](#quick-sort-in-place).
+- [Parallel or sequenced streams and map/filter/reduce pattern](#map-filter-and-reduce).
 
 ## Files
 
@@ -38,22 +61,6 @@ The user:
 1. declares a thread pool and chooses the maximum number of parallel workers in charge of the execution of tasks (`threadpool_create_and_start ()`) ;
 2. submits tasks to the thread pool (`threadpool_add_task ()`) that will be passed to one of available workers and will be executed asynchronously ;
 3. waits for all the tasks to be completed (`threadpool_wait_and_destroy ()`).
-
-### Unique features
-
-This C standard implementation of a thread pool brings unique features, not found anywhere else at the time of writing.
-
-1. **Standard C:** It uses the standard (minimalist) C11 thread library <threads.h> (§7.28 of ISO/IEC C programming language), rather the POSIX threads. It can therefore be ported more easily to systems other than unix-like systems.
-1. **Data management:** The data passed to tasks (via `threadpool_add_task ()`) can be accessed, retrieved  and released multi-thread-safely after completion of the task (via the user-defined function `job_delete ()`), allowing collecting data at task termination.
-1. **Global data management:** Global data can be defined and accessed (via `threadpool_global_data ()`) by all tasks.
-1. **Worker data management:** Local data can be defined  (via `threadpool_set_worker_local_data_manager ()`) and accessed (via `threadpool_worker_local_data ()`) for each worker of the thread pool.
-1. **Resource management:** Global resources can be allocated and deallocated (via `threadpool_set_global_resource_manager ()`) and accessed (via `threadpool_global_resource ()`) for the thread pool.
-1. **Worker life-time management:** Workers will stay alive for a short idle time, ready to process new submitted tasks, even though `threadpool_wait_and_destroy ()` has already been called and no tasks are available, as long as some other tasks are still being processed and could therefore create new tasks dynamically.
-1. **Monitoring facility:** The activity of the thread pool can be monitored and displayed by a front-end user defined function (via `threadpool_set_monitor ()`).
-1. **Task cancellation:** Pending tasks can be cancelled after submission (via `threadpool_cancel_task ()`).
-1. **Virtual tasks:** The thread pool can wait for asynchronous calls without blocking workers (via `threadpool_task_continuation ()` and `threadpool_task_continue ()`).
-
-Those features are detailed below.
 
 ### Basic functionalities
 
@@ -506,11 +513,13 @@ If needed, `work_continuator` can itself (multi-thread-safely) call `threadpool_
 
 ## Examples
 
-Type `make` to compile and run the examples (in sub-folder [examples](examples)).
+Type `make` to compile and run the examples (in the top folder).
 
 ### Quick sort in place
 
-An example of the usage of thread pool is given in files `qsip_wc.c` and `qsip_wc_test.c` [here](examples/qsip).
+The interface `qsip_wc.h` provides the function `qsip` that sorts an array using a parallel quick sort in place. `qsip` has the same signature as `qsort`.
+
+An example of the usage of thread pool is given in file `qsip_wc_test.c` [here](examples/qsip).
 
 It sorts 2 bunches of 50 lists of 1.000.000 numbers. 
 
@@ -519,7 +528,7 @@ Two encapsulated thread pools are used : one to distribute 100 tasks over 7 moni
 - `qsip_wc.c` is an attempt to implement a parallelised version of the quick sort algorithm (using a thread pool);
 
     - It uses features such as global data, worker local data, dynamic creation and deletion of jobs.
-    - It reveals that a parallelised quick sort is inefficient due to thread management overhead.
+    - It reveals that a parallelised quick sort is inefficient due to thread management overhead (do please keep using `qsort` !).
 
 - `qsip_wc_test.c` is an example of a thread pool that sorts several arrays using the above parallelised version of the quick sort algorithm.
 
@@ -572,9 +581,38 @@ $ make timers
 
 This [example](examples/mfr) shows how to implement a map, filter, reduce pattern with parallelisation.
 
-Results of each job are aggregated in the worker local data and then in the thread pool global data.
+Streams are implemented in `mfr.h` and `mfr.c`.
 
-Run it with:
+The user:
+1. declares a sequence of steps (as user-defined functions or helpers `dropuntil`, `takewhile` and `interrupt`) to process in a stream, such as:
+
+```c
+    struct mapper mappers[] = {
+      {.f = iota},
+      {.f = dropuntil,.arg = (void *[]){countuntil, &drop}},
+      {.f = printjob},
+      {.f = adddigits},
+      {.f = multipleof,.arg = &f_arg_1},
+      {.f = adddigits},
+      {.f = equals,.arg = &f_arg_2},
+      {.f = printjob,.arg = "+"},
+      {.f = takewhile,.arg = (void *[]){countwhile, &take}},
+      {.f = interrupt,.arg = (void *[]){isnull, &take}},
+    };
+
+    struct stream stream = {.nb_mappers = sizeof (mappers) / sizeof (*mappers),.mappers = mappers,      // Mappers and filters
+      .reducer = {.aggregate = &counter,.aggregator = increment},       // Reducer
+      .deletor = free,          // Destructor
+    };
+```
+
+1. creates a stream processor with `threadpool_create_and_start_stream` on one (sequenced) or more (parralel) threads.
+1. feed the stream with data with `threadpool_add_task_to_stream`.
+1. wait for all the data to be processed with `threadpool_wait_and_destroy`.
+
+Results of each job are aggregated in the worker local data and then in the thread pool global data (`stream.reducer.aggregator`).
+
+Run the example with:
 
 ```
 $ make mfr

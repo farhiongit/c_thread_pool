@@ -151,18 +151,15 @@ main (void)
     size_t take = 2;
     struct mapper mappers[] = {
       {.f = iota},
-      {.f = dropuntil,.arg = (void *[])
-       {countuntil, &drop}},
+      {.f = dropuntil,.arg = (void *[]){countuntil, &drop}},
       {.f = printjob},
       {.f = adddigits},
       {.f = multipleof,.arg = &f_arg_1},
       {.f = adddigits},
       {.f = equals,.arg = &f_arg_2},
       {.f = printjob,.arg = "+"},
-      {.f = takewhile,.arg = (void *[])
-       {countwhile, &take}},
-      {.f = interrupt,.arg = (void *[])
-       {isnull, &take}},
+      {.f = takewhile,.arg = (void *[]){countwhile, &take}},
+      {.f = interrupt,.arg = (void *[]){isnull, &take}},
     };
     struct aggregate counter = { 0 };   // Initialise aggreagte
     struct stream stream = {.nb_mappers = sizeof (mappers) / sizeof (*mappers),.mappers = mappers,      // Mappers and filters

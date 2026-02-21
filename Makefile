@@ -56,20 +56,20 @@ examples/qsip/qsip_wc_test: examples/qsip/qsip_wc_test.o examples/qsip/qsip_wc.o
 #examples/qsip/qsip_wc_test.o: CPPFLAGS+=-DSIZE=100 -DTIMES=10    # for valgrind or gdb
 .INTERMEDIATE: examples/qsip/qsip_wc_test.o
 examples/qsip/qsip_wc_test.o: CFLAGS+=-std=c23
-examples/qsip/qsip_wc_test.o: CPPFLAGS+=-I. -I../minimaps
+examples/qsip/qsip_wc_test.o: CPPFLAGS+=-I.
 
 .INTERMEDIATE: examples/qsip/qsip_wc.o
 examples/qsip/qsip_wc.o: CFLAGS+=-std=c23
-examples/qsip/qsip_wc.o: CPPFLAGS+=-I. -I../minimaps
+examples/qsip/qsip_wc.o: CPPFLAGS+=-I.
 
 examples/fuzzyword/fuzzyword: CFLAGS+=-std=c23
 examples/fuzzyword/fuzzyword: CPPFLAGS+=-DCOLLATE
-examples/fuzzyword/fuzzyword: CPPFLAGS+=-I. -I../minimaps
+examples/fuzzyword/fuzzyword: CPPFLAGS+=-I.
 examples/fuzzyword/fuzzyword: LDFLAGS+=-L. -L../minimaps
 examples/fuzzyword/fuzzyword: LDLIBS=-lwqm -ltimer -lmap
 
 examples/intensive/intensive: CFLAGS+=-std=c23
-examples/intensive/intensive: CPPFLAGS+=-I. -I../minimaps
+examples/intensive/intensive: CPPFLAGS+=-I.
 examples/intensive/intensive: LDFLAGS+=-L. -L../minimaps
 examples/intensive/intensive: LDLIBS=-lwqm -ltimer -lmap
 
@@ -78,7 +78,7 @@ examples/continuations/timers: CPPFLAGS+=-I. -I../minimaps
 examples/continuations/timers: LDFLAGS+=-L. -L../minimaps
 examples/continuations/timers: LDLIBS=-lwqm -ltimer -lmap
 
-examples/mfr/mfr: CPPFLAGS+=-I. -I../minimaps
+examples/mfr/mfr: CPPFLAGS+=-I.
 examples/mfr/mfr: LDFLAGS+=-L. -L../minimaps
 examples/mfr/mfr: LDLIBS+=-lwqm -ltimer -lmap
 examples/mfr/mfr: examples/mfr/mfr.c examples/mfr/mfr_test.c
@@ -115,7 +115,7 @@ lib%.a: %.o
 	$(AR) $(ARFLAGS) -- "$@" "$^"
 	@nm -A -g --defined-only -- "$@"
 
-#### Internationalization
+#### Internationalisation
 # Prepare for gettext (with make fr/LC_MESSAGES/libwqm.mo for instance)
 %/LC_MESSAGES/libwqm.mo: po/%.po
 	mkdir -p "$(dir $@)"

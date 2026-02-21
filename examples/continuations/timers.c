@@ -7,7 +7,6 @@
 #include <math.h>
 #include <errno.h>
 #include <unistd.h>
-#include "map.h"
 #include "timer.h"
 #include "wqm.h"
 
